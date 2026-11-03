@@ -1,0 +1,14 @@
+[
+  { "id": "d1",  "group": "Swarm",  "name": "Nodes",                 "where": "container", "cmd": "docker node ls" },
+  { "id": "d2",  "group": "Swarm",  "name": "Services",              "where": "container", "cmd": "docker service ls" },
+  { "id": "d3",  "group": "Swarm",  "name": "Stacks",                "where": "container", "cmd": "docker stack ls" },
+  { "id": "d4",  "group": "Bridge", "name": "Bridge tasks",          "where": "container", "cmd": "docker service ps --no-trunc bridge_bridge-service" },
+  { "id": "d5",  "group": "Bridge", "name": "Follow Bridge logs",    "where": "container", "cmd": "docker service logs -f --tail 100 bridge_bridge-service" },
+  { "id": "d6",  "group": "Bridge", "name": "Bridge errors (last 1000)", "where": "container", "cmd": "docker service logs --tail 1000 bridge_bridge-service 2>&1 | grep -iE 'error|exception|fail' | tail -50" },
+  { "id": "d7",  "group": "Bridge", "name": "Restart Bridge",        "where": "container", "confirm": true, "cmd": "docker service update --force bridge_bridge-service" },
+  { "id": "d8",  "group": "Bridge", "name": "Rollback Bridge",       "where": "container", "confirm": true, "cmd": "docker service rollback bridge_bridge-service" },
+  { "id": "d9",  "group": "Kafka",  "name": "Kafka ports 9094-9099", "where": "container", "cmd": "for p in 9094 9095 9096 9097 9098 9099; do nc -zv -w 2 10.104.10.89 $p; done" },
+  { "id": "d10", "group": "VM",     "name": "CPU / memory (top)",    "where": "vm",        "cmd": "top" },
+  { "id": "d11", "group": "VM",     "name": "Disk usage",            "where": "vm",        "cmd": "df -h && docker system df" },
+  { "id": "d12", "group": "VM",     "name": "Container CPU/RAM",     "where": "container", "cmd": "docker stats --no-stream --format 'table {{.Name}}\\t{{.CPUPerc}}\\t{{.MemUsage}}'" }
+]

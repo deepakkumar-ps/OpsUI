@@ -1,0 +1,825 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>OpsUI · Motion Applied</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23FA6914'/%3E%3Cpath d='M8 11l6 5-6 5' stroke='white' stroke-width='3' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3Cpath d='M16 22h8' stroke='white' stroke-width='3' stroke-linecap='round'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="/static/vendor/xterm.css">
+<script>
+  // apply saved theme before first paint (no flash)
+  (function () {
+    var t = localStorage.getItem('opsui.theme');
+    if (!t) t = matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+    document.documentElement.dataset.theme = t;
+  })();
+</script>
+<style>
+  /* ============ Motion Applied palette ============
+     Orange #FA6914 · Grey #1F292E · Teal #028091 · Bright Blue #38E9FC · Cool Grey #DEE2D9 · White */
+  :root{
+    --ma-orange:#FA6914; --ma-grey:#1F292E; --ma-teal:#028091; --ma-blue:#38E9FC; --ma-cool:#DEE2D9;
+    --font:"Montserrat", Arial, "Helvetica Neue", sans-serif;
+    --mono:"Cascadia Mono", Consolas, "DejaVu Sans Mono", Menlo, monospace;
+    --radius:8px;
+  }
+  :root[data-theme="dark"]{
+    --bg:#141b1f; --surface:#1F292E; --surface2:#26333a; --hover:#2c3a41; --line:#33424a;
+    --text:#eef0ec; --muted:#a3adb0; --faint:#73828a;
+    --accent:#FA6914; --accent-ink:#ffffff; --accent-soft:rgba(250,105,20,.14);
+    --ok:#38E9FC; --info:#38E9FC; --warn:#f6c04f; --err:#ff6b5e;
+    --term-bg:#10161a; --shadow:0 6px 24px rgba(0,0,0,.35);
+  }
+  :root[data-theme="light"]{
+    --bg:#f3f4f1; --surface:#ffffff; --surface2:#f1f3ee; --hover:#e9ece5; --line:#DEE2D9;
+    --text:#1F292E; --muted:#56656b; --faint:#7d8a8f;
+    --accent:#FA6914; --accent-ink:#ffffff; --accent-soft:rgba(250,105,20,.10);
+    --ok:#028091; --info:#028091; --warn:#a86b00; --err:#c8321f;
+    --term-bg:#ffffff; --shadow:0 6px 24px rgba(31,41,46,.12);
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%}
+  body{font:14px/1.5 var(--font);background:var(--bg);color:var(--text);display:flex;flex-direction:column;overflow:hidden}
+  button,input,select,textarea{font:inherit;color:inherit}
+  button{cursor:pointer}
+  :focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+  .hidden{display:none!important}
+  .mono{font-family:var(--mono)}
+  .muted{color:var(--muted)}
+  svg.i{width:18px;height:18px;flex:none;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+
+  /* ---------- header ---------- */
+  header.top{height:56px;flex:none;display:flex;align-items:center;gap:16px;padding:0 18px;background:var(--surface);border-bottom:1px solid var(--line)}
+  .brand{display:flex;align-items:center;gap:10px;min-width:0}
+  .badge{width:30px;height:30px;border-radius:7px;background:var(--ma-orange);display:grid;place-items:center;flex:none}
+  .badge svg{width:18px;height:18px;stroke:#fff;fill:none;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}
+  .brand b{font-size:18px;font-weight:700;letter-spacing:.2px}
+  .brand b span{color:var(--accent)}
+  .brand small{display:block;color:var(--muted);font-size:11.5px;line-height:1.1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .hdr-r{margin-left:auto;display:flex;align-items:center;gap:10px}
+  .chip{display:flex;align-items:center;gap:7px;border:1px solid var(--line);border-radius:20px;padding:5px 12px;font-size:12.5px;white-space:nowrap;background:var(--surface2)}
+  .dot{width:8px;height:8px;border-radius:50%;background:var(--faint);display:inline-block;flex:none}
+  .dot.ok{background:var(--ok)} .dot.bad{background:var(--err)} .dot.warn{background:var(--warn)} .dot.run{background:var(--accent)}
+  .iconbtn{display:inline-grid;place-items:center;width:36px;height:36px;border-radius:8px;border:1px solid var(--line);background:var(--surface2);color:var(--text)}
+  .iconbtn:hover{border-color:var(--accent);color:var(--accent)}
+
+  /* ---------- shell layout ---------- */
+  .app{flex:1;min-height:0;display:grid;grid-template-columns:200px minmax(0,1fr)}
+  nav.side{background:var(--surface);border-right:1px solid var(--line);padding:14px 10px;display:flex;flex-direction:column;gap:4px}
+  .navbtn{display:flex;align-items:center;gap:11px;width:100%;padding:10px 12px;border:0;border-radius:var(--radius);background:none;color:var(--muted);text-align:left;font-weight:500}
+  .navbtn:hover{background:var(--hover);color:var(--text)}
+  .navbtn.on{background:var(--accent-soft);color:var(--accent);font-weight:600;box-shadow:inset 3px 0 0 var(--accent)}
+  .navbtn .cnt{margin-left:auto;font-size:11px;background:var(--surface2);border:1px solid var(--line);border-radius:10px;padding:0 7px;color:var(--muted)}
+  .side .foot{margin-top:auto;font-size:11.5px;color:var(--faint);padding:8px 12px;line-height:1.4}
+  main{min-width:0;min-height:0;display:flex}
+  .view{flex:1;min-width:0;min-height:0;display:none}
+  .view.on{display:flex}
+
+  /* ---------- common bits ---------- */
+  .bar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:10px 14px;border-bottom:1px solid var(--line);background:var(--surface)}
+  .btn{display:inline-flex;align-items:center;gap:7px;border:1px solid var(--line);background:var(--surface2);border-radius:7px;padding:7px 12px;font-size:13px;font-weight:500;white-space:nowrap}
+  .btn:hover{border-color:var(--accent)}
+  .btn.p{background:var(--accent);border-color:var(--accent);color:var(--accent-ink);font-weight:600}
+  .btn.p:hover{filter:brightness(1.07)}
+  .btn.danger{color:var(--err)}
+  .btn.danger:hover{border-color:var(--err)}
+  .btn:disabled{opacity:.45;cursor:not-allowed}
+  .btn svg.i{width:16px;height:16px}
+  .field{background:var(--bg);border:1px solid var(--line);border-radius:7px;padding:7px 10px;color:var(--text);outline:none;min-width:0}
+  .field:focus{border-color:var(--accent)}
+  label.chk{display:inline-flex;align-items:center;gap:6px;font-size:13px;color:var(--muted);white-space:nowrap}
+  .spacer{flex:1}
+  .panel{background:var(--surface);border-right:1px solid var(--line);display:flex;flex-direction:column;min-height:0}
+  .panel-h{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:14px 14px 8px;font-size:11.5px;letter-spacing:1.2px;text-transform:uppercase;color:var(--muted);font-weight:600}
+  .list{flex:1;overflow:auto;padding:4px 8px 12px}
+  .grp{font-size:11px;letter-spacing:1.1px;text-transform:uppercase;color:var(--faint);padding:12px 8px 4px;font-weight:600}
+  .item{display:flex;align-items:center;gap:10px;width:100%;text-align:left;padding:8px 10px;border:1px solid transparent;border-radius:7px;background:none;color:var(--text);margin-bottom:2px}
+  .item:hover{background:var(--hover)}
+  .item.on{background:var(--accent-soft);border-color:rgba(250,105,20,.35)}
+  .item .t{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:13.5px}
+  .item .s{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:12px;color:var(--muted)}
+  .item .body{min-width:0;flex:1}
+  .empty{color:var(--muted);font-size:13px;padding:14px 10px;line-height:1.5}
+  .tiny{border:1px solid var(--line);background:var(--surface2);border-radius:5px;font-size:11.5px;padding:2px 8px;color:var(--muted);text-transform:none;letter-spacing:0;font-weight:500}
+  .tiny:hover{color:var(--accent);border-color:var(--accent)}
+  .screen{flex:1;min-height:0;overflow:auto;padding:12px 16px;background:var(--term-bg);font:13px/1.55 var(--mono);white-space:pre-wrap;word-break:break-all}
+  .screen div{min-height:1.55em}
+  .l-err{color:var(--err)} .l-warn{color:var(--warn)} .l-sys{color:var(--muted);font-style:italic}
+  .toast{position:fixed;right:16px;bottom:16px;z-index:50;display:flex;flex-direction:column;gap:8px;max-width:min(420px,calc(100vw - 32px))}
+  .toast div{background:var(--surface);border:1px solid var(--line);border-left:4px solid var(--accent);border-radius:7px;padding:10px 14px;box-shadow:var(--shadow);font-size:13px}
+  .toast .err{border-left-color:var(--err)} .toast .ok{border-left-color:var(--ok)}
+
+  /* ---------- terminal view ---------- */
+  #v-term{flex-direction:column}
+  .tabs{display:flex;align-items:stretch;gap:2px;background:var(--surface);border-bottom:1px solid var(--line);padding:6px 10px 0;min-height:44px;overflow-x:auto}
+  .ttab{display:flex;align-items:center;gap:8px;padding:7px 10px 7px 12px;border:1px solid transparent;border-bottom:0;border-radius:8px 8px 0 0;background:none;color:var(--muted);font-size:13px;white-space:nowrap;max-width:240px}
+  .ttab:hover{color:var(--text);background:var(--hover)}
+  .ttab.on{background:var(--term-bg);border-color:var(--line);color:var(--text);position:relative;top:1px}
+  .ttab .x{display:grid;place-items:center;width:18px;height:18px;border-radius:4px;color:var(--faint)}
+  .ttab .x:hover{background:var(--hover);color:var(--err)}
+  .ttab .lbl{overflow:hidden;text-overflow:ellipsis}
+  .tabs .addbar{display:flex;align-items:center;gap:6px;padding:0 4px 6px 10px;margin-left:auto}
+  .term-body{flex:1;min-height:0;display:grid;grid-template-columns:minmax(0,1fr) 300px}
+  .term-body.noqc{grid-template-columns:minmax(0,1fr) 0}
+  .term-host{position:relative;min-width:0;min-height:0;background:var(--term-bg)}
+  .pane{position:absolute;inset:0;padding:8px 4px 4px 12px;display:none}
+  .pane.on{display:block}
+  .pane .xterm{height:100%}
+  .welcome{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;padding:24px}
+  .welcome .card{max-width:520px;width:100%;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:26px;box-shadow:var(--shadow)}
+  .welcome h2{margin:0 0 6px;font-size:21px}
+  .welcome h2 span{color:var(--accent)}
+  .welcome p{margin:0 0 18px;color:var(--muted)}
+  .choice{display:flex;gap:12px;flex-wrap:wrap}
+  .choice button{flex:1;min-width:200px;text-align:left;border:1px solid var(--line);background:var(--surface2);border-radius:10px;padding:14px 16px}
+  .choice button:hover{border-color:var(--accent)}
+  .choice b{display:flex;align-items:center;gap:8px;margin-bottom:4px}
+  .choice small{color:var(--muted);font-size:12.5px;line-height:1.45;display:block}
+  aside.qc{border-left:1px solid var(--line);background:var(--surface);display:flex;flex-direction:column;min-height:0;overflow:hidden}
+  .qc .qitem{display:block;width:100%;text-align:left;border:1px solid var(--line);background:var(--surface2);border-radius:8px;padding:9px 11px;margin-bottom:8px;color:var(--text)}
+  .qc .qitem:hover{border-color:var(--accent)}
+  .qc .qitem .n{display:flex;align-items:center;gap:6px;font-size:13px;font-weight:600}
+  .qc .qitem code{display:block;margin-top:4px;font:11.5px/1.4 var(--mono);color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .tag{font-size:10.5px;font-weight:600;border-radius:4px;padding:0 6px;border:1px solid var(--line);color:var(--muted);text-transform:uppercase;letter-spacing:.5px}
+  .tag.vm{color:var(--ma-teal);border-color:var(--ma-teal)}
+  :root[data-theme="dark"] .tag.vm{color:var(--ma-blue);border-color:var(--ma-blue)}
+  .tag.container{color:var(--accent);border-color:rgba(250,105,20,.6)}
+
+  /* ---------- logs / files / commands ---------- */
+  .split{flex:1;min-width:0;display:grid;grid-template-columns:270px minmax(0,1fr)}
+  .work{display:flex;flex-direction:column;min-width:0;min-height:0}
+  .stat{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;color:var(--muted);padding:4px 10px;border-radius:14px;background:var(--surface2);border:1px solid var(--line)}
+  .stat b{color:var(--text)} .stat.e b{color:var(--err)} .stat.w b{color:var(--warn)}
+  #editor{flex:1;min-height:0;resize:none;border:0;outline:none;background:var(--term-bg);color:var(--text);font:13px/1.55 var(--mono);padding:14px 16px;tab-size:4;white-space:pre;overflow:auto}
+  .crumb{font:13px var(--mono);color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+  .form{flex:1;overflow:auto;padding:22px 26px;max-width:860px}
+  .form h2{margin:0 0 4px;font-size:20px}
+  .form .sub{color:var(--muted);margin:0 0 20px}
+  .frow{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px}
+  .fcol{display:flex;flex-direction:column;gap:6px;margin-bottom:14px}
+  .fcol>span:first-child{font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.8px}
+  textarea.field{font-family:var(--mono);font-size:13px;min-height:150px;resize:vertical;line-height:1.5}
+  .hint{font-size:12.5px;color:var(--faint)}
+  .actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:6px}
+
+  ::-webkit-scrollbar{width:10px;height:10px}
+  ::-webkit-scrollbar-thumb{background:var(--line);border-radius:6px;border:2px solid transparent;background-clip:padding-box}
+  ::-webkit-scrollbar-track{background:transparent}
+
+  @media (max-width:1100px){ .term-body{grid-template-columns:minmax(0,1fr) 0} aside.qc{display:none} }
+  @media (max-width:860px){
+    .app{grid-template-columns:1fr} nav.side{flex-direction:row;overflow-x:auto;padding:6px;border-right:0;border-bottom:1px solid var(--line)}
+    .navbtn{width:auto} .side .foot{display:none}
+    .split{grid-template-columns:1fr;grid-template-rows:200px minmax(0,1fr)}
+    .brand small,#nodechip{display:none} .frow{grid-template-columns:1fr}
+  }
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-term" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 9l3 3-3 3M12 15h5"/></symbol>
+  <symbol id="i-cmd" viewBox="0 0 24 24"><path d="M13 3L4 14h7l-1 7 9-11h-7z"/></symbol>
+  <symbol id="i-logs" viewBox="0 0 24 24"><path d="M3 12h4l3-8 4 16 3-8h4"/></symbol>
+  <symbol id="i-files" viewBox="0 0 24 24"><path d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z"/></symbol>
+  <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></symbol>
+  <symbol id="i-moon" viewBox="0 0 24 24"><path d="M21 12.8A9 9 0 1111.2 3a7 7 0 009.8 9.8z"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+  <symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></symbol>
+  <symbol id="i-box" viewBox="0 0 24 24"><path d="M21 8l-9-5-9 5 9 5 9-5zM3 8v8l9 5 9-5V8M12 13v8"/></symbol>
+  <symbol id="i-server" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="7" rx="2"/><rect x="3" y="13" width="18" height="7" rx="2"/><path d="M7 7.5h.01M7 16.5h.01"/></symbol>
+  <symbol id="i-play" viewBox="0 0 24 24"><path d="M7 4l13 8-13 8z"/></symbol>
+  <symbol id="i-stop" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="1"/></symbol>
+  <symbol id="i-save" viewBox="0 0 24 24"><path d="M5 3h11l5 5v11a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2z"/><path d="M7 3v6h8M7 21v-7h10v7"/></symbol>
+  <symbol id="i-panel" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M15 4v16"/></symbol>
+  <symbol id="i-dl" viewBox="0 0 24 24"><path d="M12 3v12M7 10l5 5 5-5M5 21h14"/></symbol>
+</svg>
+
+<header class="top">
+  <div class="brand">
+    <div class="badge"><svg viewBox="0 0 24 24"><path d="M6 8l5 4-5 4"/><path d="M13 17h6"/></svg></div>
+    <div><b><span>Ops</span>UI</b><small>Motion Applied · Swarm console <span id="hostname"></span></small></div>
+  </div>
+  <div class="hdr-r">
+    <span class="chip" id="nodechip" title="Swarm nodes"><span class="dot" id="nodedot"></span><span id="nodetxt">connecting…</span></span>
+    <button type="button" class="iconbtn" id="themeBtn" title="Switch light / dark theme" aria-label="Switch theme"><svg class="i"><use href="#i-sun"/></svg></button>
+  </div>
+</header>
+
+<div class="app">
+  <nav class="side" aria-label="Main">
+    <button type="button" class="navbtn on" data-view="term"><svg class="i"><use href="#i-term"/></svg>Terminal<span class="cnt" id="termCount">0</span></button>
+    <button type="button" class="navbtn" data-view="cmds"><svg class="i"><use href="#i-cmd"/></svg>Commands<span class="cnt" id="cmdCount">0</span></button>
+    <button type="button" class="navbtn" data-view="logs"><svg class="i"><use href="#i-logs"/></svg>Live logs<span class="dot hidden" id="liveDot" style="margin-left:auto"></span></button>
+    <button type="button" class="navbtn" data-view="files"><svg class="i"><use href="#i-files"/></svg>Files</button>
+    <div class="foot">Commands &amp; files are saved on the VM in <span class="mono" id="wsPath">/opt/docker</span></div>
+  </nav>
+
+  <main>
+    <!-- ======================= TERMINAL ======================= -->
+    <section class="view on" id="v-term">
+      <div class="tabs" id="tabs" role="tablist">
+        <div class="addbar">
+          <button type="button" class="btn" id="newCont" title="New shell inside the OpsUI container (docker CLI, workspace)"><svg class="i"><use href="#i-box"/></svg>Container</button>
+          <button type="button" class="btn" id="newVm" title="New SSH shell on the VM"><svg class="i"><use href="#i-server"/></svg>VM (SSH)</button>
+          <input class="field mono" id="sshTarget" style="width:210px;font-size:12.5px" placeholder="user@host" aria-label="SSH target" spellcheck="false">
+          <button type="button" class="iconbtn" id="qcToggle" title="Show / hide quick commands" aria-label="Toggle quick commands"><svg class="i"><use href="#i-panel"/></svg></button>
+        </div>
+      </div>
+      <div class="term-body" id="termBody">
+        <div class="term-host" id="termHost">
+          <div class="welcome" id="welcome">
+            <div class="card">
+              <h2>Open a <span>terminal</span></h2>
+              <p>Full interactive shells in your browser: vim, top, docker exec -it, tab-completion, Ctrl+C.</p>
+              <div class="choice">
+                <button type="button" id="wCont"><b><svg class="i"><use href="#i-box"/></svg>Container shell</b><small>Runs inside OpsUI. The <span class="mono">docker</span> command controls the whole swarm; your workspace is mounted.</small></button>
+                <button type="button" id="wVm"><b><svg class="i"><use href="#i-server"/></svg>VM shell (SSH)</b><small>A real login on the VM itself: <span class="mono" id="wTarget">user@host</span>. You'll be asked for the VM password.</small></button>
+              </div>
+            </div>
+          </div>
+        </div>
+        <aside class="qc" id="qc">
+          <div class="panel-h"><span>Quick commands</span><button type="button" class="tiny" id="qcManage">Manage</button></div>
+          <div style="padding:0 12px 8px"><input class="field" id="qcSearch" placeholder="Search commands…" style="width:100%"></div>
+          <div class="list" id="qcList" style="padding:0 12px 12px"></div>
+        </aside>
+      </div>
+    </section>
+
+    <!-- ======================= COMMANDS ======================= -->
+    <section class="view" id="v-cmds">
+      <div class="split">
+        <div class="panel">
+          <div class="panel-h"><span>Saved commands</span><button type="button" class="tiny" id="cNew">+ New</button></div>
+          <div style="padding:0 12px 8px"><input class="field" id="cSearch" placeholder="Search…" style="width:100%"></div>
+          <div class="list" id="cList"></div>
+        </div>
+        <div class="work">
+          <form class="form" id="cForm" autocomplete="off">
+            <h2 id="cTitle">New command</h2>
+            <p class="sub">Saved on the VM, available to everyone using this console. Click it later to run it in a terminal.</p>
+            <div class="frow">
+              <label class="fcol"><span>Name</span><input class="field" id="fName" required maxlength="80" placeholder="e.g. Restart Bridge"></label>
+              <label class="fcol"><span>Group</span><input class="field" id="fGroup" maxlength="40" placeholder="e.g. Bridge" list="groupList"><datalist id="groupList"></datalist></label>
+            </div>
+            <label class="fcol"><span>Command</span>
+              <textarea class="field" id="fCmd" required spellcheck="false" placeholder="docker service update --force bridge_bridge-service"></textarea>
+              <span class="hint">Multiple lines run one after another, exactly as if typed. Use <span class="mono">cd</span>, pipes, scripts — anything your shell supports.</span>
+            </label>
+            <div class="frow">
+              <label class="fcol"><span>Run in</span>
+                <select class="field" id="fWhere">
+                  <option value="active">Active terminal (whatever is open)</option>
+                  <option value="vm">VM shell (SSH)</option>
+                  <option value="container">Container shell</option>
+                </select>
+              </label>
+              <label class="fcol"><span>Safety</span>
+                <label class="chk" style="padding:8px 0"><input type="checkbox" id="fConfirm"> Ask for confirmation before running</label>
+              </label>
+            </div>
+            <div class="actions">
+              <button type="submit" class="btn p"><svg class="i"><use href="#i-save"/></svg>Save command</button>
+              <button type="button" class="btn" id="cRun"><svg class="i"><use href="#i-play"/></svg>Run now</button>
+              <span class="spacer"></span>
+              <button type="button" class="btn danger" id="cDel">Delete</button>
+            </div>
+            <p class="hint" id="cMsg" style="margin-top:14px"></p>
+          </form>
+        </div>
+      </div>
+    </section>
+
+    <!-- ======================= LOGS ======================= -->
+    <section class="view" id="v-logs">
+      <div class="split">
+        <div class="panel">
+          <div class="panel-h"><span>Log sources</span><button type="button" class="tiny" id="lRefresh">Refresh</button></div>
+          <div class="list" id="lList"></div>
+        </div>
+        <div class="work">
+          <div class="bar">
+            <span class="dot" id="lDot"></span><b id="lName" style="font-size:14px">Select a source</b><span class="muted" id="lState" style="font-size:12.5px"></span>
+            <span class="spacer"></span>
+            <label class="chk">tail <input class="field" id="lTail" type="number" min="0" max="5000" value="200" style="width:76px;padding:4px 8px"></label>
+            <button type="button" class="btn p" id="lStart"><svg class="i"><use href="#i-play"/></svg>Start</button>
+            <button type="button" class="btn" id="lStop"><svg class="i"><use href="#i-stop"/></svg>Stop</button>
+          </div>
+          <div class="bar" style="padding-top:8px;padding-bottom:8px">
+            <input class="field" id="lFilter" placeholder="Filter, e.g. pgv or ERROR" style="width:230px">
+            <label class="chk"><input type="checkbox" id="lOnlyErr"> errors &amp; warnings only</label>
+            <label class="chk"><input type="checkbox" id="lFollow" checked> auto-scroll</label>
+            <button type="button" class="btn" id="lPause">Pause</button>
+            <span class="spacer"></span>
+            <span class="stat"><b id="cAll">0</b> lines</span>
+            <span class="stat e"><b id="cErr">0</b> errors</span>
+            <span class="stat w"><b id="cWarn">0</b> warnings</span>
+            <button type="button" class="btn" id="lDl" title="Download visible lines"><svg class="i"><use href="#i-dl"/></svg></button>
+            <button type="button" class="btn" id="lClear">Clear</button>
+          </div>
+          <div class="screen" id="lScreen" aria-live="off"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ======================= FILES ======================= -->
+    <section class="view" id="v-files">
+      <div class="split">
+        <div class="panel">
+          <div class="panel-h"><span>VM files</span><button type="button" class="tiny" id="fRefresh">Refresh</button></div>
+          <div style="padding:0 12px 8px"><input class="field mono" id="fGo" placeholder="go to path, e.g. /etc/nginx  ↵" style="width:100%" aria-label="Go to path"></div>
+          <div class="list" id="fList"></div>
+          <div style="display:flex;gap:6px;padding:10px 12px;border-top:1px solid var(--line)">
+            <input class="field" id="fNew" placeholder="new file name" style="flex:1;width:0">
+            <button type="button" class="btn" id="fNewBtn">Create</button>
+          </div>
+        </div>
+        <div class="work">
+          <div class="bar">
+            <span class="dot" id="fDot"></span><span class="crumb" id="fPath">No file open</span>
+            <span class="muted" id="fMsg" style="font-size:12.5px"></span>
+            <span class="spacer"></span>
+            <span class="muted mono" id="fPos" style="font-size:12px"></span>
+            <button type="button" class="btn" id="fReload" disabled>Reload</button>
+            <button type="button" class="btn p" id="fSave" disabled><svg class="i"><use href="#i-save"/></svg>Save <span class="muted" style="color:inherit;opacity:.8">Ctrl+S</span></button>
+          </div>
+          <textarea id="editor" spellcheck="false" placeholder="Select a file on the left…" aria-label="File editor"></textarea>
+        </div>
+      </div>
+    </section>
+  </main>
+</div>
+<div class="toast" id="toast" aria-live="polite"></div>
+
+<script type="module">
+'use strict';
+const $ = id => document.getElementById(id);
+const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
+const icon = name => { const s = document.createElementNS('http://www.w3.org/2000/svg', 'svg'); s.setAttribute('class', 'i'); const u = document.createElementNS('http://www.w3.org/2000/svg', 'use'); u.setAttribute('href', '#i-' + name); s.appendChild(u); return s; };
+function toast(msg, kind) { const d = el('div', kind || '', msg); $('toast').appendChild(d); setTimeout(() => d.remove(), 4500); }
+async function api(url, opts) {
+  const r = await fetch(url, Object.assign({ cache: 'no-store' }, opts));
+  const j = await r.json().catch(() => ({ error: 'HTTP ' + r.status }));
+  if (!r.ok && !j.error) j.error = 'HTTP ' + r.status;
+  return j;
+}
+const post = (url, body) => api(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+
+let cfg = { vmSsh: '', token: '', workspace: '/opt/docker', maxTerms: 4 };
+let view = 'term';
+
+/* ===================== theme ===================== */
+const XT = {
+  dark:  { background:'#10161a', foreground:'#e6e9e5', cursor:'#FA6914', cursorAccent:'#10161a', selectionBackground:'rgba(250,105,20,.35)',
+           black:'#1F292E', red:'#ff6b5e', green:'#5fd38d', yellow:'#f6c04f', blue:'#5aa9ff', magenta:'#d38aff', cyan:'#38E9FC', white:'#dfe3dc',
+           brightBlack:'#5b6a71', brightRed:'#ff8a7f', brightGreen:'#86e3a9', brightYellow:'#ffd47a', brightBlue:'#86c1ff', brightMagenta:'#e2abff', brightCyan:'#7df1ff', brightWhite:'#ffffff' },
+  light: { background:'#ffffff', foreground:'#1F292E', cursor:'#FA6914', cursorAccent:'#ffffff', selectionBackground:'rgba(250,105,20,.25)',
+           black:'#1F292E', red:'#c8321f', green:'#1d7f3e', yellow:'#9a6400', blue:'#1f5fbf', magenta:'#8a3fb3', cyan:'#028091', white:'#9aa39c',
+           brightBlack:'#56656b', brightRed:'#e04b36', brightGreen:'#2a9a52', brightYellow:'#b87a00', brightBlue:'#2f74d8', brightMagenta:'#a456cf', brightCyan:'#0596aa', brightWhite:'#1F292E' }
+};
+const curTheme = () => document.documentElement.dataset.theme === 'light' ? 'light' : 'dark';
+function applyTheme(t) {
+  document.documentElement.dataset.theme = t;
+  localStorage.setItem('opsui.theme', t);
+  $('themeBtn').querySelector('use').setAttribute('href', t === 'dark' ? '#i-sun' : '#i-moon');
+  $('themeBtn').title = t === 'dark' ? 'Switch to light theme' : 'Switch to dark theme';
+  sessions.forEach(s => { s.term.options.theme = XT[t]; });
+}
+$('themeBtn').addEventListener('click', () => applyTheme(curTheme() === 'dark' ? 'light' : 'dark'));
+
+/* ===================== navigation ===================== */
+function setView(v) {
+  view = v;
+  document.querySelectorAll('.navbtn').forEach(b => b.classList.toggle('on', b.dataset.view === v));
+  document.querySelectorAll('.view').forEach(s => s.classList.toggle('on', s.id === 'v-' + v));
+  if (v === 'term') { const s = activeSession(); if (s) requestAnimationFrame(() => { fitSession(s); s.term.focus(); }); }
+  if (v === 'logs' && !$('lList').childElementCount) loadTargets();
+  if (v === 'files' && !$('fList').childElementCount) ls(curDir);
+  if (v === 'cmds') renderCmdList();
+}
+document.querySelectorAll('.navbtn').forEach(b => b.addEventListener('click', () => setView(b.dataset.view)));
+
+/* ===================== status ===================== */
+async function status() {
+  if (document.hidden) return;
+  try {
+    const s = await api('/api/status');
+    const nodes = (s.nodes || []).map(n => n.split('\t'));
+    const ready = nodes.filter(n => n[1] === 'Ready').length;
+    $('nodetxt').textContent = nodes.length ? `${ready}/${nodes.length} nodes ready` : 'no swarm';
+    $('nodedot').className = 'dot ' + (nodes.length && ready === nodes.length ? 'ok' : 'bad');
+    $('nodechip').title = nodes.map(n => `${n[0]}  ${n[1]}  ${n[3] || ''}`).join('\n');
+    const leader = nodes.find(n => /Leader/.test(n[3] || ''));
+    $('hostname').textContent = leader ? '· ' + leader[0] : '';
+    svcInfo = {};
+    (s.services || []).forEach(x => { const [n, r] = x.split('\t'); svcInfo[n] = r || ''; });
+    if (view === 'logs') renderTargets();
+  } catch { $('nodetxt').textContent = 'status unavailable'; $('nodedot').className = 'dot bad'; }
+}
+setInterval(status, 60000);
+document.addEventListener('visibilitychange', () => { if (!document.hidden) status(); });
+
+/* ===================== TERMINAL ===================== */
+let XtermLib = null;
+const sessions = [];
+let activeId = null, seq = 0;
+const activeSession = () => sessions.find(s => s.id === activeId) || null;
+
+async function loadXterm() {
+  if (!XtermLib) XtermLib = (await import('/static/vendor/xterm.mjs')).default;
+  return XtermLib;
+}
+function sshTarget() { return ($('sshTarget').value || cfg.vmSsh || '').trim(); }
+$('sshTarget').addEventListener('change', () => { localStorage.setItem('opsui.ssh', $('sshTarget').value.trim()); $('wTarget').textContent = sshTarget() || 'user@host'; });
+
+async function newSession(kind, onReady) {
+  if (kind === 'vm' && !/^[\w.\-]+@[\w.\-]+(:\d+)?$/.test(sshTarget())) {
+    toast('Enter the VM SSH target first, e.g. ocsautotest@10.104.10.88', 'err'); $('sshTarget').focus(); return null;
+  }
+  if (sessions.length >= cfg.maxTerms) { toast(`Maximum ${cfg.maxTerms} terminals open — close one first.`, 'err'); return null; }
+  const { Terminal, FitAddon } = await loadXterm();
+  const id = ++seq;
+  const term = new Terminal({ cursorBlink: true, fontFamily: getComputedStyle(document.body).getPropertyValue('--mono'), fontSize: 13.5,
+                              lineHeight: 1.2, scrollback: 5000, theme: XT[curTheme()], allowProposedApi: true });
+  const fit = new FitAddon();
+  term.loadAddon(fit);
+  const pane = el('div', 'pane');
+  $('termHost').appendChild(pane);
+  const label = kind === 'vm' ? sshTarget().split(':')[0] : 'container';
+  const tab = el('button', 'ttab'); tab.type = 'button'; tab.setAttribute('role', 'tab');
+  const dot = el('span', 'dot');
+  const lbl = el('span', 'lbl', `${id} · ${label}`);
+  const x = el('span', 'x'); x.appendChild(icon('x')); x.title = 'Close terminal'; x.style.width = '18px';
+  x.firstChild.style.width = '14px'; x.firstChild.style.height = '14px';
+  tab.append(icon(kind === 'vm' ? 'server' : 'box'), lbl, dot, x);
+  $('tabs').insertBefore(tab, $('tabs').querySelector('.addbar'));
+  const s = { id, kind, target: kind === 'vm' ? sshTarget() : '', term, fit, pane, tab, dot, ws: null, queue: [], open: false };
+  sessions.push(s);
+  tab.addEventListener('click', e => { if (e.target.closest('.x')) closeSession(s); else activate(s); });
+  term.open(pane);
+  activate(s);
+  term.attachCustomKeyEventHandler(e => clipboardKeys(term, e));
+  term.onData(d => send(s, d));
+  term.onResize(({ cols, rows }) => { if (s.open) s.ws.send(JSON.stringify({ t: 'r', c: cols, r: rows })); });
+  new ResizeObserver(() => { if (pane.classList.contains('on')) fitSession(s); }).observe(pane);
+  connect(s, onReady);
+  updateTermUi();
+  return s;
+}
+// Ctrl+C copies when text is selected (otherwise it is a normal Ctrl+C / interrupt); Ctrl+V pastes.
+// Returning false stops xterm sending ^C/^V; for Ctrl+V the browser then fires its native paste,
+// which xterm handles (works over plain http, where navigator.clipboard is unavailable).
+function clipboardKeys(term, e) {
+  if (e.type !== 'keydown' || !e.ctrlKey || e.shiftKey || e.altKey || e.metaKey) return true;
+  const k = e.key.toLowerCase();
+  if (k === 'v') return false;
+  if (k === 'c' && term.hasSelection()) { copyText(term.getSelection()); term.clearSelection(); e.preventDefault(); return false; }
+  return true;
+}
+function copyText(t) {
+  if (navigator.clipboard && window.isSecureContext) { navigator.clipboard.writeText(t).catch(() => copyFallback(t)); return; }
+  copyFallback(t);
+}
+function copyFallback(t) {
+  const prev = document.activeElement, ta = el('textarea'); ta.value = t;
+  ta.style.cssText = 'position:fixed;top:0;left:0;opacity:0'; document.body.appendChild(ta); ta.select();
+  try { document.execCommand('copy'); } catch {} ta.remove(); if (prev) prev.focus();
+}
+function fitSession(s) { try { s.fit.fit(); } catch {} }
+function activate(s) {
+  activeId = s.id;
+  sessions.forEach(o => { o.pane.classList.toggle('on', o === s); o.tab.classList.toggle('on', o === s); });
+  $('welcome').classList.add('hidden');
+  requestAnimationFrame(() => { fitSession(s); s.term.focus(); });
+}
+function send(s, data) {
+  if (s.open && s.ws.readyState === 1) s.ws.send(JSON.stringify({ t: 'i', d: data }));
+  else if (!s.ended) s.queue.push(data);
+}
+async function connect(s, onReady) {
+  const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+  fitSession(s);
+  const q = new URLSearchParams({ t: cfg.token, shell: s.kind, target: s.target, cols: s.term.cols || 120, rows: s.term.rows || 30 });
+  const ws = new WebSocket(`${proto}//${location.host}/ws/term?${q}`);
+  ws.binaryType = 'arraybuffer';
+  s.ws = ws; s.dot.className = 'dot warn';
+  ws.onopen = () => {
+    s.open = true; s.dot.className = 'dot ok';
+    ws.send(JSON.stringify({ t: 'r', c: s.term.cols, r: s.term.rows }));
+    if (onReady) setTimeout(onReady, s.kind === 'vm' ? 0 : 350);
+    const q2 = s.queue.splice(0); q2.forEach(d => send(s, d));
+  };
+  ws.onmessage = e => { if (typeof e.data === 'string') s.term.write(e.data); else s.term.write(new Uint8Array(e.data)); };
+  ws.onclose = async () => {
+    const wasOpen = s.open; s.open = false; s.dot.className = 'dot bad';
+    if (!wasOpen && !s.retried) {               // token may have expired: refresh once and retry
+      s.retried = true; await loadConfig(); if (!s.closed) return connect(s, onReady);
+    }
+    if (!s.closed) { s.ended = true; s.term.write('\r\n\x1b[90m[disconnected — press Enter to reconnect]\x1b[0m\r\n'); }
+  };
+  s.term.onKey && !s._rk && (s._rk = s.term.onKey(({ domEvent }) => {
+    if (s.ended && domEvent.key === 'Enter') { s.ended = false; s.retried = false; s.term.write('\r\n'); connect(s); }
+  }));
+}
+function closeSession(s) {
+  s.closed = true;
+  try { s.ws && s.ws.close(); } catch {}
+  s.term.dispose(); s.pane.remove(); s.tab.remove();
+  sessions.splice(sessions.indexOf(s), 1);
+  if (activeId === s.id) { const n = sessions[sessions.length - 1]; if (n) activate(n); else { activeId = null; $('welcome').classList.remove('hidden'); } }
+  updateTermUi();
+}
+function updateTermUi() { $('termCount').textContent = sessions.length; }
+$('newCont').addEventListener('click', () => newSession('container'));
+$('newVm').addEventListener('click', () => newSession('vm'));
+$('wCont').addEventListener('click', () => newSession('container'));
+$('wVm').addEventListener('click', () => newSession('vm'));
+$('qcToggle').addEventListener('click', () => {
+  $('termBody').classList.toggle('noqc'); localStorage.setItem('opsui.qc', $('termBody').classList.contains('noqc') ? '0' : '1');
+  const s = activeSession(); if (s) requestAnimationFrame(() => fitSession(s));
+});
+if (localStorage.getItem('opsui.qc') === '0') $('termBody').classList.add('noqc');
+window.addEventListener('beforeunload', e => { if (sessions.some(s => s.open)) { e.preventDefault(); e.returnValue = ''; } });
+
+/* ===================== COMMANDS ===================== */
+let commands = [], editId = null;
+async function loadCommands() {
+  const r = await api('/api/commands');
+  commands = Array.isArray(r) ? r : [];
+  $('cmdCount').textContent = commands.length;
+  renderQc(); if (view === 'cmds') renderCmdList();
+  $('groupList').replaceChildren(...[...new Set(commands.map(c => c.group))].map(g => { const o = el('option'); o.value = g; return o; }));
+}
+async function saveAll(list) {
+  const r = await post('/api/commands', { commands: list });
+  if (r.error) { toast(r.error, 'err'); return false; }
+  commands = r; $('cmdCount').textContent = commands.length; renderQc(); renderCmdList();
+  $('groupList').replaceChildren(...[...new Set(commands.map(c => c.group))].map(g => { const o = el('option'); o.value = g; return o; }));
+  return true;
+}
+function grouped(list) {
+  const m = new Map();
+  list.forEach(c => { if (!m.has(c.group)) m.set(c.group, []); m.get(c.group).push(c); });
+  return [...m.entries()].sort((a, b) => a[0].localeCompare(b[0]));
+}
+function matchesCmd(c, q) { q = q.trim().toLowerCase(); return !q || (c.name + ' ' + c.group + ' ' + c.cmd).toLowerCase().includes(q); }
+function whereTag(c) { return c.where === 'active' ? null : el('span', 'tag ' + c.where, c.where === 'vm' ? 'VM' : 'container'); }
+
+function renderQc() {
+  const box = $('qcList'); box.textContent = '';
+  const list = commands.filter(c => matchesCmd(c, $('qcSearch').value));
+  if (!commands.length) { box.appendChild(el('div', 'empty', 'No saved commands yet. Click “Manage” to add your first one — e.g. restart Bridge, check Kafka ports.')); return; }
+  if (!list.length) { box.appendChild(el('div', 'empty', 'No match.')); return; }
+  for (const [g, items] of grouped(list)) {
+    box.appendChild(el('div', 'grp', g));
+    items.forEach(c => {
+      const b = el('button', 'qitem'); b.type = 'button'; b.title = 'Run: ' + c.cmd;
+      const n = el('span', 'n'); n.append(icon('play')); n.lastChild.style.cssText = 'width:13px;height:13px;color:var(--accent)';
+      n.append(document.createTextNode(c.name)); const t = whereTag(c); if (t) { t.style.marginLeft = 'auto'; n.append(t); }
+      b.append(n, el('code', null, c.cmd.split('\n')[0] + (c.cmd.includes('\n') ? ' …' : '')));
+      b.addEventListener('click', () => runCommand(c));
+      box.appendChild(b);
+    });
+  }
+}
+$('qcSearch').addEventListener('input', renderQc);
+$('qcManage').addEventListener('click', () => setView('cmds'));
+
+function renderCmdList() {
+  const box = $('cList'); box.textContent = '';
+  const list = commands.filter(c => matchesCmd(c, $('cSearch').value));
+  if (!commands.length) box.appendChild(el('div', 'empty', 'Nothing saved yet. Fill in the form to add your first command.'));
+  for (const [g, items] of grouped(list)) {
+    box.appendChild(el('div', 'grp', g));
+    items.forEach(c => {
+      const b = el('button', 'item' + (c.id === editId ? ' on' : '')); b.type = 'button';
+      const body = el('span', 'body'); body.append(el('span', 't', c.name), el('span', 's mono', c.cmd.split('\n')[0]));
+      b.append(body); const t = whereTag(c); if (t) b.append(t);
+      b.addEventListener('click', () => editCmd(c.id));
+      box.appendChild(b);
+    });
+  }
+}
+$('cSearch').addEventListener('input', renderCmdList);
+function editCmd(id) {
+  const c = commands.find(x => x.id === id);
+  editId = c ? c.id : null;
+  $('cTitle').textContent = c ? 'Edit command' : 'New command';
+  $('fName').value = c ? c.name : ''; $('fGroup').value = c ? c.group : '';
+  $('fCmd').value = c ? c.cmd : ''; $('fWhere').value = c ? c.where : 'active'; $('fConfirm').checked = c ? c.confirm : false;
+  $('cDel').disabled = !c; $('cMsg').textContent = '';
+  renderCmdList(); $('fName').focus();
+}
+function formCmd() {
+  return { id: editId || undefined, name: $('fName').value.trim(), group: $('fGroup').value.trim() || 'General',
+           cmd: $('fCmd').value.replace(/\s+$/, ''), where: $('fWhere').value, confirm: $('fConfirm').checked };
+}
+$('cNew').addEventListener('click', () => editCmd(null));
+$('cForm').addEventListener('submit', async e => {
+  e.preventDefault();
+  const c = formCmd();
+  if (!c.name || !c.cmd.trim()) { $('cMsg').textContent = 'Name and command are required.'; return; }
+  if (!editId) c.id = 'c' + Date.now().toString(36);
+  const list = editId ? commands.map(x => x.id === editId ? c : x) : [...commands, c];
+  if (await saveAll(list)) { editId = c.id; renderCmdList(); $('cTitle').textContent = 'Edit command'; $('cDel').disabled = false;
+                             $('cMsg').textContent = 'Saved on the VM ✓'; toast(`Saved “${c.name}”`, 'ok'); }
+});
+$('cDel').addEventListener('click', async () => {
+  const c = commands.find(x => x.id === editId); if (!c || !confirm(`Delete “${c.name}”?`)) return;
+  if (await saveAll(commands.filter(x => x.id !== editId))) { toast('Deleted', 'ok'); editCmd(null); }
+});
+$('cRun').addEventListener('click', () => { const c = formCmd(); if (!c.cmd.trim()) { $('cMsg').textContent = 'Type a command first.'; return; } runCommand(c); });
+
+async function runCommand(c) {
+  if (c.confirm && !confirm(`Run “${c.name || 'command'}”?\n\n${c.cmd}`)) return;
+  const text = c.cmd.replace(/\r?\n/g, '\r') + '\r';
+  setView('term');
+  let s = activeSession();
+  if (c.where !== 'active' && (!s || s.kind !== c.where)) s = sessions.find(o => o.kind === c.where && !o.ended) || null;
+  if (s && !s.ended) { activate(s); send(s, text); return; }
+  const kind = c.where === 'active' ? 'container' : c.where;
+  const ns = await newSession(kind);
+  if (ns) {
+    if (kind === 'vm') { send(ns, ''); ns.term.write('\x1b[33m[OpsUI] Log in first; the command will be typed for you once you are in.\x1b[0m\r\n');
+                         ns.pendingCmd = text; watchPrompt(ns); }
+    else send(ns, text);
+  }
+}
+// For SSH sessions: type the queued command once a shell prompt ($ or #) appears after login
+function watchPrompt(s) {
+  const d = s.term.onWriteParsed(() => {
+    const buf = s.term.buffer.active, line = buf.getLine(buf.cursorY + buf.viewportY);
+    const txt = line ? line.translateToString(true) : '';
+    if (/[$#]\s?$/.test(txt) && s.pendingCmd) { const t = s.pendingCmd; s.pendingCmd = null; d.dispose(); send(s, t); }
+  });
+}
+
+/* ===================== LIVE LOGS ===================== */
+const PING = '::opsui-ping::', ANSI = /\x1b\[[0-9;?]*[A-Za-z]/g, MAX_LINES = 2000;
+const ERR_RE = /\b(ERROR|FATAL|EXCEPTION|CRITICAL|Traceback|panic)\b/i, WARN_RE = /\bWARN(ING)?\b/i;
+let svcInfo = {}, targets = { services: [], containers: [], files: [] };
+let curTarget = localStorage.getItem('opsui.target') || '', logCtl = null, wantLive = false, runId = 0, paused = false;
+let nAll = 0, nErr = 0, nWarn = 0, countsDirty = false, queue = [], scheduled = false;
+
+async function stream(url, opts, onLine) {
+  const res = await fetch(url, opts);
+  if (!res.ok) { onLine('[opsui] ' + (await res.text()), 'sys'); return; }
+  const reader = res.body.getReader(), dec = new TextDecoder(); let buf = '';
+  for (;;) {
+    const { value, done } = await reader.read(); if (done) break;
+    buf += dec.decode(value, { stream: true }); let i;
+    while ((i = buf.indexOf('\n')) >= 0) { const line = buf.slice(0, i).replace(/\r$/, ''); buf = buf.slice(i + 1); if (!line.endsWith(PING)) onLine(line); }
+  }
+  if (buf && !buf.endsWith(PING)) onLine(buf);
+}
+function pushLine(t, c) {
+  queue.push([String(t).replace(ANSI, ''), c]);
+  if (queue.length > MAX_LINES) queue.splice(0, queue.length - MAX_LINES);
+  if (!scheduled && !paused) { scheduled = true; requestAnimationFrame(flush); }
+}
+function flush() {
+  scheduled = false; if (paused || !queue.length) return;
+  const scr = $('lScreen'), frag = document.createDocumentFragment();
+  for (const [t, c] of queue) {
+    const d = el('div', null, t); const k = c || (ERR_RE.test(t) ? 'err' : WARN_RE.test(t) ? 'warn' : '');
+    if (k) d.className = 'l-' + k; nAll++; if (k === 'err') nErr++; if (k === 'warn') nWarn++;
+    d.hidden = !matches(t, k); frag.appendChild(d);
+  }
+  queue = []; scr.appendChild(frag); countsDirty = true;
+  let extra = scr.childElementCount - MAX_LINES; while (extra-- > 0) scr.removeChild(scr.firstChild);
+  if ($('lFollow').checked) scr.scrollTop = scr.scrollHeight;
+}
+setInterval(() => { if (!countsDirty) return; countsDirty = false; $('cAll').textContent = nAll; $('cErr').textContent = nErr; $('cWarn').textContent = nWarn; }, 500);
+function matches(t, k) {
+  if ($('lOnlyErr').checked && k !== 'err' && k !== 'warn' && k !== 'sys') return false;
+  const f = $('lFilter').value.trim().toLowerCase(); return !f || t.toLowerCase().includes(f);
+}
+function refilter() { for (const d of $('lScreen').children) { const k = d.className.startsWith('l-') ? d.className.slice(2) : ''; d.hidden = !matches(d.textContent, k); } }
+$('lFilter').addEventListener('input', refilter); $('lOnlyErr').addEventListener('change', refilter);
+
+async function loadTargets() { const t = await api('/api/targets'); if (t.error) { $('lList').replaceChildren(el('div', 'empty', t.error)); return; } targets = t; renderTargets(); }
+function renderTargets() {
+  const list = $('lList'); list.textContent = ''; let n = 0;
+  const group = (label, kind, names) => {
+    if (!names || !names.length) return; list.appendChild(el('div', 'grp', label));
+    names.forEach(name => {
+      const key = kind + ':' + name, b = el('button', 'item' + (key === curTarget ? ' on' : '')); b.type = 'button'; n++;
+      const d = el('span', 'dot');
+      if (key === curTarget && wantLive) d.className = 'dot run';
+      else if (kind === 'service' && svcInfo[name]) { const m = /^(\d+)\/(\d+)/.exec(svcInfo[name]); if (m) d.className = 'dot ' + (m[1] === m[2] && m[2] !== '0' ? 'ok' : 'bad'); }
+      const sub = key === curTarget && wantLive ? 'live' : kind === 'service' ? (svcInfo[name] ? 'replicas ' + svcInfo[name] : 'service') : kind;
+      const body = el('span', 'body'); body.append(el('span', 't', name), el('span', 's', sub));
+      b.append(d, body); b.addEventListener('click', () => { curTarget = key; localStorage.setItem('opsui.target', key); startLogs(); });
+      list.appendChild(b);
+    });
+  };
+  group('Swarm services', 'service', targets.services); group('Containers', 'container', targets.containers); group('Log files', 'file', targets.files);
+  if (!n) list.appendChild(el('div', 'empty', 'Nothing found. Is /var/run/docker.sock mounted?'));
+}
+function setLogState(txt, cls) {
+  const name = curTarget ? curTarget.slice(curTarget.indexOf(':') + 1) : 'Select a source';
+  $('lName').textContent = name; $('lState').textContent = txt; $('lDot').className = 'dot' + (cls ? ' ' + cls : '');
+  $('liveDot').classList.toggle('hidden', !wantLive); $('liveDot').className = 'dot run' + (wantLive ? '' : ' hidden');
+}
+async function startLogs() {
+  if (!curTarget) { toast('Pick a log source on the left', 'err'); return; }
+  stopLogs(true); const my = ++runId;
+  const i = curTarget.indexOf(':'), kind = curTarget.slice(0, i), name = curTarget.slice(i + 1);
+  wantLive = true; pushLine(`──── streaming ${kind} ${name} ────`, 'sys'); renderTargets();
+  let first = true;
+  while (wantLive && my === runId) {
+    logCtl = new AbortController(); setLogState('· live', 'ok');
+    const tail = first ? Math.max(0, Math.min(5000, parseInt($('lTail').value, 10) || 0)) : 0; first = false;
+    try { await stream(`/api/logs?kind=${kind}&name=${encodeURIComponent(name)}&tail=${tail}`, { signal: logCtl.signal }, (l, c) => pushLine(l, c)); }
+    catch (e) { if (e.name === 'AbortError') break; }
+    if (!wantLive || my !== runId) break;
+    pushLine('[opsui] stream ended (service restarted/redeployed?) — reconnecting in 3s…', 'sys'); setLogState('· reconnecting…', 'warn');
+    await new Promise(r => setTimeout(r, 3000));
+  }
+}
+function stopLogs(silent) {
+  wantLive = false; runId++; if (logCtl) logCtl.abort(); logCtl = null;
+  if (!silent) { pushLine('──── stopped ────', 'sys'); renderTargets(); }
+  setLogState(silent ? '' : '· stopped', '');
+}
+$('lStart').addEventListener('click', startLogs); $('lStop').addEventListener('click', () => stopLogs(false));
+$('lRefresh').addEventListener('click', loadTargets);
+$('lPause').addEventListener('click', () => { paused = !paused; $('lPause').textContent = paused ? 'Resume' : 'Pause'; if (!paused && queue.length) { scheduled = true; requestAnimationFrame(flush); } });
+$('lClear').addEventListener('click', () => { $('lScreen').textContent = ''; queue = []; nAll = nErr = nWarn = 0; countsDirty = true; });
+$('lDl').addEventListener('click', () => {
+  const text = [...$('lScreen').children].filter(d => !d.hidden).map(d => d.textContent).join('\n');
+  const a = el('a'); a.href = URL.createObjectURL(new Blob([text], { type: 'text/plain' }));
+  a.download = (curTarget.split(':')[1] || 'logs') + '-' + new Date().toISOString().replace(/[:.]/g, '-') + '.log';
+  document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+});
+
+/* ===================== FILES ===================== */
+let curDir = '', curFile = null, dirty = false;
+const join = (a, b) => a ? a + '/' + b : b;
+async function ls(path) {
+  const r = await api('/api/ls?path=' + encodeURIComponent(path)); const list = $('fList'); list.textContent = '';
+  if (r.error) { list.appendChild(el('div', 'empty', r.error)); return; }
+  curDir = r.path; list.appendChild(el('div', 'grp', '/' + curDir));
+  const add = (label, sub, on, fn, ic) => { const b = el('button', 'item' + (on ? ' on' : '')); b.type = 'button';
+    const body = el('span', 'body'); body.append(el('span', 't', label), el('span', 's', sub)); b.append(icon(ic), body); b.addEventListener('click', fn); list.appendChild(b); };
+  if (curDir) add('..', 'parent folder', false, () => ls(curDir.split('/').slice(0, -1).join('/')), 'files');
+  r.items.forEach(it => { const p = join(curDir, it.name);
+    add(it.name, it.dir ? 'folder' : (p === curFile ? (dirty ? 'editing · unsaved' : 'editing') : 'file'), p === curFile, () => it.dir ? ls(p) : openFile(p), it.dir ? 'files' : 'save'); });
+  if (!r.items.length) list.appendChild(el('div', 'empty', '(empty folder)'));
+}
+function setDirty(v) { dirty = v; $('fDot').className = 'dot ' + (curFile ? (v ? 'warn' : 'ok') : ''); $('fMsg').textContent = curFile ? (v ? 'unsaved changes' : '') : ''; }
+async function openFile(p) {
+  if (dirty && !confirm('Discard unsaved changes?')) return;
+  const r = await api('/api/file?path=' + encodeURIComponent(p)); if (r.error) { toast(r.error, 'err'); return; }
+  curFile = p; $('editor').value = r.content; $('editor').scrollTop = 0; $('fPath').textContent = '/' + p;
+  $('fSave').disabled = false; $('fReload').disabled = false; setDirty(false); ls(curDir); $('editor').focus();
+}
+async function saveFile() {
+  if (!curFile) return; $('fSave').disabled = true;
+  const r = await post('/api/file', { path: curFile, content: $('editor').value });
+  $('fSave').disabled = false;
+  if (r.error) { toast(r.error, 'err'); return; }
+  setDirty(false); $('fMsg').textContent = 'saved ' + new Date().toLocaleTimeString() + ' (backup .bak)'; ls(curDir);
+}
+$('editor').addEventListener('input', () => { if (curFile && !dirty) setDirty(true); });
+$('editor').addEventListener('keydown', e => {
+  if (e.key === 'Tab' && !e.ctrlKey && !e.altKey) { e.preventDefault(); const ed = $('editor'); ed.setRangeText('  ', ed.selectionStart, ed.selectionEnd, 'end'); if (curFile && !dirty) setDirty(true); }
+});
+const updPos = () => { const ed = $('editor'), pre = ed.value.slice(0, ed.selectionStart).split('\n'); $('fPos').textContent = curFile ? `Ln ${pre.length}, Col ${pre[pre.length - 1].length + 1}` : ''; };
+['keyup', 'click'].forEach(ev => $('editor').addEventListener(ev, updPos));
+$('fSave').addEventListener('click', saveFile);
+$('fReload').addEventListener('click', () => { if (curFile && (!dirty || confirm('Discard unsaved changes?'))) { dirty = false; openFile(curFile); } });
+$('fRefresh').addEventListener('click', () => ls(curDir));
+$('fGo').addEventListener('keydown', async e => {
+  if (e.key !== 'Enter') return;
+  const p = $('fGo').value.trim().replace(/^\/+|\/+$/g, ''); if (!$('fGo').value.trim()) return;
+  const r = await api('/api/ls?path=' + encodeURIComponent(p));
+  if (!r.error) { ls(p); $('fGo').value = ''; }
+  else if (r.error === 'not a folder') { const i = p.lastIndexOf('/'); await ls(i < 0 ? '' : p.slice(0, i)); openFile(p); $('fGo').value = ''; }
+  else toast(r.error, 'err');
+});
+$('fNewBtn').addEventListener('click', () => {
+  const n = $('fNew').value.trim(); if (!n || /[\\/]|^\.\.?$/.test(n)) { toast('Enter a plain file name (no slashes)', 'err'); return; }
+  if (dirty && !confirm('Discard unsaved changes?')) return;
+  curFile = join(curDir, n); $('editor').value = ''; $('fNew').value = ''; $('fPath').textContent = '/' + curFile + '  (new)';
+  $('fSave').disabled = false; $('fReload').disabled = true; setDirty(true); $('editor').focus();
+});
+document.addEventListener('keydown', e => { if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's' && view === 'files') { e.preventDefault(); saveFile(); } });
+
+/* ===================== boot ===================== */
+async function loadConfig() {
+  const c = await api('/api/config');
+  if (!c.error) { cfg = Object.assign(cfg, c); $('wsPath').textContent = cfg.workspace; }
+}
+(async () => {
+  applyTheme(curTheme());
+  await loadConfig();
+  curDir = cfg.filesHome || '';
+  $('sshTarget').value = localStorage.getItem('opsui.ssh') || cfg.vmSsh || '';
+  $('wTarget').textContent = sshTarget() || 'user@host';
+  status(); loadCommands(); editCmd(null); setView('term');
+  window.OPSUI = { sessions, runCommand };   // handy for debugging in the browser console
+})();
+</script>
+</body>
+</html>

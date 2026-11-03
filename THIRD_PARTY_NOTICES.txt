@@ -1,0 +1,5 @@
+static/vendor/xterm.mjs, static/vendor/xterm.css
+  xterm.js and @xterm/addon-fit - Copyright (c) 2017-2019 The xterm.js authors,
+  Copyright (c) 2014-2016 SourceLair Private Company, Copyright (c) 2012-2013 Christopher Jeffrey.
+  MIT License - https://github.com/xtermjs/xterm.js/blob/master/LICENSE
+  (bundled ES-module build as redistributed in Microsoft Playwright, Apache-2.0)
