@@ -20,9 +20,9 @@ Footprint: about 25 MB RAM and 0% CPU when idle. Uses only the Python standard l
 ## Rebuild and deploy (on the VM)
     cd ~/opsui
     sed -i 's/\r$//' Dockerfile app.py opsui-stack.yml
-    nice -n 19 docker build -t carlesabella297/opsui:2.0 .
-    docker push carlesabella297/opsui:2.0
-    docker service update --with-registry-auth --image carlesabella297/opsui:2.0 \
+    nice -n 19 docker build -t deepakkumarps08122/opsui:1.0 .
+    docker push deepakkumarps08122/opsui:1.0
+    docker service update --with-registry-auth --image deepakkumarps08122/opsui:1.0 \
         --env-add VM_SSH=ocsautotest@10.104.10.88 --env-add MAX_TERMS=4 \
         --mount-add type=bind,source=/,target=/host \
         --env-add FILES_ROOT=/host --env-add FILES_HOME=opt/docker \
