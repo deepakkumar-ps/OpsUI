@@ -1,6 +1,6 @@
 version: "3.8"
 
-# OpsUI 2.0 on the swarm manager (10.104.10.88), port 3000
+# OpsUI 1.0 on the swarm manager (10.104.10.88), port 3000
 services:
   opsui:
     image: deepakkumarps08122/opsui:1.0
