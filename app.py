@@ -6,14 +6,17 @@ OpsUI 1.0 - lightweight ops console for a Docker Swarm manager.
                   - "container" shell (docker CLI -> host engine, workspace mounted)
                   - "vm" shell (ssh to the VM itself, e.g. ocsautotest@10.104.10.88)
   * Commands    : custom commands saved on the VM (WORKSPACE/opsui-commands.json)
-  * Live logs   : docker service logs -f / docker logs -f / tail -F <file>
-  * Files       : edit files under FILES_ROOT (the whole VM when / is mounted at /host)
+  * Live logs   : docker service logs -f / docker logs -f / tail -F <file>  (running sources only)
+  * Files       : browse, edit, upload (drag & drop), delete under FILES_ROOT
+                  (the whole VM when / is mounted at /host)
+  * Versions    : installed version of every running service (image tag / env / OCI label)
 
 Python standard library only. Nothing runs unless a browser is connected;
 every child process is killed as soon as its browser stream/terminal closes.
 """
 import base64, fcntl, gzip, hashlib, hmac, json, mimetypes, os, pty, re, secrets, select
 import shutil, signal, socket, struct, subprocess, sys, termios, threading, time
+import urllib.error, urllib.parse, urllib.request
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 from urllib.parse import urlparse, parse_qs
 
@@ -25,11 +28,13 @@ if not os.path.isdir(FILES_ROOT):
     FILES_ROOT = WORKSPACE
 FILES_HOME = os.environ.get("FILES_HOME", "").strip("/")  # folder the Files tab opens in, relative to FILES_ROOT
 PORT = int(os.environ.get("PORT", "3000"))
-OPS_USER = os.environ.get("OPS_USER", "admin")
+OPS_USER = os.environ.get("OPS_USER", "Secline")
 VM_SSH = os.environ.get("VM_SSH", "")                     # e.g. ocsautotest@10.104.10.88
 MAX_STREAMS = int(os.environ.get("MAX_STREAMS", "3"))     # concurrent live log/run streams
 MAX_TERMS = int(os.environ.get("MAX_TERMS", "4"))         # concurrent terminals
 MAX_FILE_BYTES = 2 * 1024 * 1024
+MAX_UPLOAD_BYTES = int(os.environ.get("MAX_UPLOAD_MB", "512")) * 1024 * 1024   # per file (streamed to disk)
+MAX_LS_ITEMS = 5000
 COMMANDS_FILE = os.path.join(WORKSPACE, "opsui-commands.json")
 STATIC_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static")
 DEFAULT_COMMANDS = os.path.join(os.path.dirname(os.path.abspath(__file__)), "commands.default.json")
@@ -97,6 +102,290 @@ def run_quick(argv, timeout=10):
         return [l for l in r.stdout.splitlines() if l.strip()]
     except Exception:
         return []
+
+
+REPLICAS_RE = re.compile(r"^(\d+)/(\d+)")
+
+
+def list_services():
+    """One `docker service ls` shared by /api/status and /api/targets (cached 10 s)."""
+    def load():
+        out = []
+        for line in run_quick(["docker", "service", "ls", "--format", "{{.Name}}\t{{.Replicas}}\t{{.Image}}"]):
+            name, reps, image = (line.split("\t") + ["", ""])[:3]
+            m = REPLICAS_RE.match(reps)
+            out.append({"name": name, "replicas": reps.split(" ")[0], "image": image,
+                        "running": int(m[1]) if m else 0, "desired": int(m[2]) if m else 0})
+        return sorted(out, key=lambda s: s["name"])
+    return cached("services", 10, load)
+
+
+def list_containers():
+    """Running containers that are NOT swarm tasks (those are covered by their service)."""
+    rows = run_quick(["docker", "ps", "--format", '{{.Names}}\t{{.Label "com.docker.swarm.service.name"}}'])
+    return sorted(r.split("\t")[0] for r in rows if not r.partition("\t")[2].strip())
+
+
+# ---- installed versions
+_WORD = {"ui": "UI", "api": "API", "db": "DB", "mongodb": "MongoDB", "opsui": "OpsUI", "id": "ID"}
+_VER_LABELS = ("org.opencontainers.image.version", "org.label-schema.version", "version", "VERSION")
+
+
+def pretty_name(svc):
+    """bridge_bridge-service -> Bridge Service, kafka_kafka-ui -> Kafka UI."""
+    base = svc.split("_", 1)[1] if "_" in svc else svc
+    return " ".join(_WORD.get(w.lower(), w.capitalize()) for w in re.split(r"[-_.]+", base) if w)
+
+
+def _looks_like_version(v):
+    return bool(v) and any(c.isdigit() for c in v)
+
+
+def _image_tag(image):
+    ref = image.split("@", 1)[0]                     # drop @sha256:... digest
+    repo, _, tag = ref.rpartition(":")
+    return tag if repo and "/" not in tag else ""    # "registry:5000/app" has no tag
+
+
+# *_VERSION variables that describe the runtime/base image, not the application
+_RUNTIME_ENV = re.compile(r"^(DOTNET|ASPNET|ASPNETCORE|NUGET|POWERSHELL|PYTHON|PIP|SETUPTOOLS|WHEEL|NODE|NPM|"
+                          r"YARN|JAVA|JDK|JRE|GOLANG|GO|RUBY|GEM|BUNDLER|PHP|PERL|GPG|GOSU|TINI|OPENSSL|"
+                          r"ALPINE|DEBIAN|UBUNTU|DOCKER|SCALA|SBT|GRADLE|MAVEN)_")
+_GENERIC_ENV = ("", "APP", "APPLICATION", "SERVICE", "BUILD", "RELEASE", "IMAGE", "PRODUCT")
+
+
+_DIGEST_RE = re.compile(r"sha256:[0-9a-f]{64}")
+_NUM_VER_RE = re.compile(r"^v?(\d+(?:\.\d+)+)([-+].*)?$")      # 1.2 / 2.1.5.3 / v1.0.0-rc1, not '260f9e8'
+_BASE_SUFFIX = re.compile(r"^-(ubuntu|debian|alpine|bookworm|bullseye|buster|jammy|focal|noble|slim|jre|jdk)",
+                          re.I)
+_MANIFEST_TYPES = ("application/vnd.oci.image.index.v1+json,application/vnd.docker.distribution.manifest."
+                   "list.v2+json,application/vnd.docker.distribution.manifest.v2+json,"
+                   "application/vnd.oci.image.manifest.v1+json")
+_net = {"down_until": 0.0}                          # registry unreachable -> don't retry for 10 min
+
+
+def _running_image(svc, image):
+    """(labels, env, digests) of the image the service is actually running: the image of its task
+    container on this node if there is one, else the image named in the service spec."""
+    refs = []
+    ids = run_quick(["docker", "ps", "-q", "--filter", f"label=com.docker.swarm.service.name={svc}"])
+    if ids:
+        refs += run_quick(["docker", "container", "inspect", "--format", "{{.Image}}", ids[0]])[:1]
+    for ref in dict.fromkeys(refs + [image, image.split("@", 1)[0]]):
+        out = run_quick(["docker", "image", "inspect", "--format", "{{json .RepoDigests}}\t{{json .Config}}", ref])
+        if out:
+            digests, _, cfg = out[0].partition("\t")
+            try:
+                cfg = json.loads(cfg) or {}
+            except ValueError:
+                cfg = {}
+            return cfg.get("Labels") or {}, cfg.get("Env") or [], set(_DIGEST_RE.findall(digests))
+    return {}, [], set()
+
+
+def _split_ref(image):
+    """'atlasplatformdocker/bridge:latest@sha256:..' -> ('docker.io', 'atlasplatformdocker/bridge')."""
+    name = image.split("@", 1)[0]
+    if ":" in name.rsplit("/", 1)[-1]:
+        name = name.rsplit(":", 1)[0]
+    parts = name.split("/")
+    if len(parts) > 1 and ("." in parts[0] or ":" in parts[0] or parts[0] == "localhost"):
+        reg, parts = parts[0], parts[1:]
+    else:
+        reg = "docker.io"
+    if reg in ("docker.io", "index.docker.io", "registry-1.docker.io"):
+        reg = "docker.io"
+        if len(parts) == 1:
+            parts = ["library"] + parts
+    return reg, "/".join(parts)
+
+
+def _clean_tag(tag):
+    """'8.0.4-ubuntu2204' -> '8.0.4', 'v1.2.0' -> '1.2.0', '2.1.5.3-rc1' stays."""
+    m = _NUM_VER_RE.match(tag)
+    if not m:
+        return tag
+    return m[1] if not m[2] or _BASE_SUFFIX.match(m[2]) else m[1] + m[2]
+
+
+def _best_tag(tags):
+    """Most specific version among tags of the same image: 2.1.5.3 beats 2.1 and 2."""
+    nums = [t for t in tags if _NUM_VER_RE.match(t)]
+    if not nums:
+        return ""
+    return _clean_tag(max(nums, key=lambda t: (_NUM_VER_RE.match(t)[1].count("."), -len(t))))
+
+
+def _http(url, token=None, method="GET"):
+    h = {"User-Agent": "OpsUI", "Accept": _MANIFEST_TYPES + ",application/json"}
+    if token:
+        h["Authorization"] = "Bearer " + token
+    return urllib.request.urlopen(urllib.request.Request(url, headers=h, method=method), timeout=6)
+
+
+def _hub_version(repo, digests):
+    """Docker Hub: find the version tag(s) whose digest is the one we run (newest tags first)."""
+    url = f"https://hub.docker.com/v2/repositories/{repo}/tags?page_size=100&ordering=last_updated"
+    for _ in range(3):
+        with _http(url) as r:
+            page = json.load(r)
+        hits = [t["name"] for t in page.get("results") or []
+                if ({t.get("digest")} | {i.get("digest") for i in t.get("images") or []}) & digests]
+        if _best_tag(hits):
+            return _best_tag(hits)
+        url = page.get("next")
+        if not url:
+            break
+    return ""
+
+
+def _v2_version(registry, repo, digests):
+    """Any OCI registry (ghcr.io, ...): list tags, compare manifest digests of the newest versions."""
+    base, token = f"https://{registry}/v2/{repo}", None
+    try:
+        r = _http(base + "/tags/list?n=1000")
+    except urllib.error.HTTPError as e:
+        if e.code != 401:
+            return ""
+        chal = dict(re.findall(r'(\w+)="([^"]*)"', e.headers.get("WWW-Authenticate", "")))
+        if not chal.get("realm"):
+            return ""
+        q = {"service": chal.get("service", registry), "scope": chal.get("scope", f"repository:{repo}:pull")}
+        with _http(chal["realm"] + "?" + urllib.parse.urlencode(q)) as tr:
+            tok = json.load(tr)
+        token = tok.get("token") or tok.get("access_token")
+        r = _http(base + "/tags/list?n=1000", token)
+    with r:
+        tags = json.load(r).get("tags") or []
+    vkey = lambda t: tuple(int(x) for x in _NUM_VER_RE.match(t)[1].split("."))
+    for t in sorted((t for t in tags if _NUM_VER_RE.match(t)), key=vkey, reverse=True)[:30]:
+        with _http(f"{base}/manifests/{t}", token, "HEAD") as m:
+            if m.headers.get("Docker-Content-Digest") in digests:
+                return _clean_tag(t)
+    return ""
+
+
+def registry_version(image, digests):
+    """Version tag in the image's registry that points at exactly the image being run."""
+    if not digests or time.monotonic() < _net["down_until"]:
+        return ""
+    reg, repo = _split_ref(image)
+    try:
+        return _hub_version(repo, digests) if reg == "docker.io" else _v2_version(reg, repo, digests)
+    except urllib.error.HTTPError:
+        return ""                                  # private / unknown repo: just skip it
+    except Exception:
+        _net["down_until"] = time.monotonic() + 600
+        return ""
+
+
+def _pick_version(svc, labels, env):
+    words = {w for w in re.split(r"[-_.]+", svc.lower()) if len(w) > 2}
+    named, generic = [], []
+    for e in env:
+        k, _, v = e.partition("=")
+        k, v = k.upper(), v.strip()
+        if not k.endswith("VERSION") or not _looks_like_version(v) or _RUNTIME_ENV.match(k):
+            continue
+        prefix = k[:-len("VERSION")].strip("_")
+        p = prefix.lower()
+        if p and any(w.startswith(p) or p.startswith(w) for w in words):   # BRIDGE_VERSION, MONGO_VERSION
+            named.append(v)
+        elif prefix in _GENERIC_ENV:                                          # VERSION, APP_VERSION
+            generic.append(v)
+    # an OCI version label inherited from the base OS (ubuntu 22.04, ...) is not the app's version
+    if str(labels.get("org.opencontainers.image.ref.name", "")).lower() not in ("ubuntu", "debian", "alpine"):
+        for k in _VER_LABELS:
+            if _looks_like_version(str(labels.get(k, ""))):
+                named.append(str(labels[k]))
+    return (named + generic or [""])[0]
+
+
+def service_version(svc, image, spec_env):
+    """Version a service is running. `image` is the spec image incl. @sha256 digest, so the cache
+    entry changes as soon as a new ':latest' is deployed.
+      1. image tag, if it is a version (e.g. :2.1.5.3)
+      2. registry: the version tag that points at the very same digest we run (:latest == :2.1.5.3)
+      3. <SERVICE>_VERSION env var / image version label / VERSION env var
+      4. the tag itself (e.g. 'latest')"""
+    def load():
+        tag = _image_tag(image)
+        if _looks_like_version(tag):
+            return tag
+        labels, env, digests = _running_image(svc, image)
+        return registry_version(image, digests | set(_DIGEST_RE.findall(image))) \
+            or _pick_version(svc, labels, spec_env + env) or tag or "—"
+    return cached(("ver", svc, image), 6 * 3600, load)
+
+
+def running_versions():
+    running = [s for s in list_services() if s["running"] > 0]
+    if not running:
+        return []
+    # one docker call for the exact spec image (with digest) and env of every running service
+    fmt = "{{.Spec.Name}}\t{{.Spec.TaskTemplate.ContainerSpec.Image}}\t{{json .Spec.TaskTemplate.ContainerSpec.Env}}"
+    spec = {}
+    for line in run_quick(["docker", "service", "inspect", "--format", fmt] + [s["name"] for s in running]):
+        name, img, env = (line.split("\t") + ["", ""])[:3]
+        try:
+            spec[name] = (img, json.loads(env) or [])
+        except ValueError:
+            spec[name] = (img, [])
+    out = []
+    for s in running:
+        img, env = spec.get(s["name"], (s["image"], []))
+        out.append({"service": s["name"], "label": pretty_name(s["name"]), "image": img.split("@", 1)[0],
+                    "version": service_version(s["name"], img or s["image"], env)})
+    return out
+
+
+# ---- file operations
+def _own_like_parent(p):
+    """New files/folders get the owner of their parent folder instead of root."""
+    try:
+        st = os.stat(os.path.dirname(p))
+        os.chown(p, st.st_uid, st.st_gid)
+    except Exception:
+        pass
+
+
+def make_dirs(d):
+    """mkdir -p that keeps ownership consistent with the existing parent folder."""
+    missing = []
+    while not os.path.isdir(d):
+        if os.path.lexists(d):
+            raise ValueError(f"{os.path.relpath(d, FILES_ROOT)} exists and is not a folder")
+        missing.append(d)
+        d = os.path.dirname(d)
+    for m in reversed(missing):
+        try:
+            os.mkdir(m)
+        except FileExistsError:
+            continue
+        _own_like_parent(m)
+
+
+def entry_path(rel):
+    """Path of an entry itself (a symlink is NOT followed), checked to be inside FILES_ROOT."""
+    rel = (rel or "").replace("\\", "/").strip("/")
+    name = os.path.basename(rel)
+    if not rel or name in ("", ".", ".."):
+        raise ValueError("invalid path")
+    return os.path.join(safe_path(FILES_ROOT, os.path.dirname(rel)), name)
+
+
+def delete_entry(rel):
+    p = entry_path(rel)
+    home = os.path.realpath(os.path.join(FILES_ROOT, FILES_HOME))
+    if (FILES_ROOT != WORKSPACE and os.path.dirname(p) == FILES_ROOT) or p == home \
+            or home.startswith(p + os.sep):
+        raise ValueError("refusing to delete a top-level or protected folder")
+    if not os.path.lexists(p):
+        raise FileNotFoundError(p)
+    if os.path.isdir(p) and not os.path.islink(p):
+        shutil.rmtree(p)
+    else:
+        os.unlink(p)
 
 
 def list_log_files():
@@ -236,9 +525,11 @@ class WSReader:
             need = i + (4 if masked else 0) + ln
             if len(b) < need:
                 break
-            if masked:
-                mask = b[i:i + 4]
-                data = bytes(c ^ mask[j % 4] for j, c in enumerate(b[i + 4:need]))
+            if masked:                         # unmask with one big-int XOR (~100x faster than per byte)
+                data = b[i + 4:need]
+                if ln:
+                    key = (b[i:i + 4] * (ln // 4 + 1))[:ln]
+                    data = (int.from_bytes(data, "big") ^ int.from_bytes(key, "big")).to_bytes(ln, "big")
             else:
                 data = b[i:need]
             self.buf = b[need:]
@@ -350,6 +641,48 @@ class Handler(BaseHTTPRequestHandler):
                 except Exception:
                     pass
             _stream_slots.release()
+
+    # ---- file upload: raw body streamed to a temp file, then atomically renamed into place
+    def _upload(self, q):
+        p = safe_path(FILES_ROOT, q.get("path", ""))
+        n = int(self.headers.get("Content-Length", "-1") or -1)
+        if p == FILES_ROOT or os.path.isdir(p):
+            return self._err("a folder with that name already exists", 409)
+        if n < 0:
+            return self._err("Content-Length required", 411)
+        if n > MAX_UPLOAD_BYTES:
+            return self._err(f"file too large (max {MAX_UPLOAD_BYTES // 1048576} MB)", 413)
+        existed = os.path.isfile(p)
+        if existed and q.get("overwrite") != "1":
+            return self._err("file already exists", 409)
+        make_dirs(os.path.dirname(p))
+        tmp = os.path.join(os.path.dirname(p), f".{os.path.basename(p)}.opsui-{secrets.token_hex(4)}")
+        try:
+            with open(tmp, "wb") as f:
+                left = n
+                while left:
+                    chunk = self.rfile.read(min(left, 1 << 20))
+                    if not chunk:
+                        raise ConnectionError("upload interrupted")
+                    f.write(chunk)
+                    left -= len(chunk)
+            if existed:                                   # keep owner/mode of the file we replace
+                st = os.stat(p)
+                os.chmod(tmp, st.st_mode & 0o7777)
+                try:
+                    os.chown(tmp, st.st_uid, st.st_gid)
+                except Exception:
+                    pass
+            else:
+                _own_like_parent(tmp)
+            os.replace(tmp, p)
+        except BaseException:
+            try:
+                os.unlink(tmp)
+            except OSError:
+                pass
+            raise
+        self._json({"ok": True})
 
     # ---- terminal over websocket
     def _terminal(self, q):
@@ -497,19 +830,20 @@ class Handler(BaseHTTPRequestHandler):
                 return self._static("index.html" if u.path in ("/", "/index.html") else u.path[len("/static/"):])
             if u.path == "/api/config":
                 self._json({"vmSsh": VM_SSH, "token": new_token(), "workspace": WORKSPACE,
-                            "maxTerms": MAX_TERMS, "user": OPS_USER, "filesHome": FILES_HOME})
-            elif u.path == "/api/targets":
+                            "maxTerms": MAX_TERMS, "user": OPS_USER, "filesHome": FILES_HOME,
+                            "maxUpload": MAX_UPLOAD_BYTES})
+            elif u.path == "/api/targets":                # only sources that are actually running
                 self._json(cached("targets", 10, lambda: {
-                    "services": run_quick(["docker", "service", "ls", "--format", "{{.Name}}"]),
-                    "containers": run_quick(["docker", "ps", "--format", "{{.Names}}"]),
+                    "services": [{k: s[k] for k in ("name", "replicas", "running", "desired")}
+                                 for s in list_services() if s["running"] > 0],
+                    "containers": list_containers(),
                     "files": list_log_files(),
                 }))
             elif u.path == "/api/status":
                 self._json(cached("status", 20, lambda: {
                     "nodes": run_quick(["docker", "node", "ls", "--format",
                                         "{{.Hostname}}\t{{.Status}}\t{{.Availability}}\t{{.ManagerStatus}}"]),
-                    "services": run_quick(["docker", "service", "ls", "--format",
-                                           "{{.Name}}\t{{.Replicas}}\t{{.Image}}"]),
+                    "versions": running_versions(),
                 }))
             elif u.path == "/api/logs":
                 kind, name = q.get("kind", ""), q.get("name", "")
@@ -527,10 +861,12 @@ class Handler(BaseHTTPRequestHandler):
                 d = safe_path(FILES_ROOT, q.get("path", ""))
                 if not os.path.isdir(d):
                     return self._err("not a folder")
-                items = [{"name": e.name, "dir": e.is_dir()}
-                         for e in sorted(os.scandir(d), key=lambda e: (not e.is_dir(), e.name.lower()))]
+                with os.scandir(d) as it:
+                    items = [{"name": e.name, "dir": e.is_dir()} for e in it]
+                items.sort(key=lambda e: (not e["dir"], e["name"].lower()))
                 rel = os.path.relpath(d, FILES_ROOT)
-                self._json({"path": "" if rel == "." else rel.replace(os.sep, "/"), "items": items})
+                self._json({"path": "" if rel == "." else rel.replace(os.sep, "/"),
+                            "items": items[:MAX_LS_ITEMS], "truncated": len(items) > MAX_LS_ITEMS})
             elif u.path == "/api/file":
                 p = safe_path(FILES_ROOT, q.get("path", ""))
                 if os.path.getsize(p) > MAX_FILE_BYTES:
@@ -558,23 +894,33 @@ class Handler(BaseHTTPRequestHandler):
             return self._err("cross-origin request blocked", 403)
         u = urlparse(self.path)
         try:
+            if u.path == "/api/upload":                # raw body, not JSON
+                return self._upload({k: v[0] for k, v in parse_qs(u.query).items()})
             data = self._body()
-            if u.path == "/api/file":
+            if u.path == "/api/exists":
+                paths = data.get("paths")
+                if not isinstance(paths, list):
+                    return self._err("paths must be a list")
+                self._json({"exists": [r for r in paths[:20000] if isinstance(r, str)
+                                       and os.path.lexists(safe_path(FILES_ROOT, r))]})
+            elif u.path == "/api/mkdir":
+                make_dirs(safe_path(FILES_ROOT, data.get("path", "")))
+                self._json({"ok": True})
+            elif u.path == "/api/delete":
+                delete_entry(data.get("path", ""))
+                self._json({"ok": True})
+            elif u.path == "/api/file":
                 p = safe_path(FILES_ROOT, data.get("path", ""))
                 if p == FILES_ROOT or os.path.isdir(p):
                     return self._err("path is a directory")
-                os.makedirs(os.path.dirname(p), exist_ok=True)
+                make_dirs(os.path.dirname(p))
                 existed = os.path.isfile(p)
                 if existed:
                     shutil.copy2(p, p + ".bak")
                 with open(p, "w", encoding="utf-8", newline="") as f:      # keeps owner/mode of existing files
                     f.write(data.get("content", ""))
                 if not existed:                       # new file: same owner as its folder, not root
-                    try:
-                        st = os.stat(os.path.dirname(p))
-                        os.chown(p, st.st_uid, st.st_gid)
-                    except Exception:
-                        pass
+                    _own_like_parent(p)
                 self._json({"ok": True})
             elif u.path == "/api/commands":
                 items = data.get("commands")
@@ -591,6 +937,10 @@ class Handler(BaseHTTPRequestHandler):
                 self._err("not found", 404)
         except ValueError as e:
             self._err(str(e))
+        except FileNotFoundError:
+            self._err("not found", 404)
+        except PermissionError as e:
+            self._err(f"permission denied: {e.filename or ''}", 403)
         except Exception as e:
             self._err(f"{type(e).__name__}: {e}", 500)
 

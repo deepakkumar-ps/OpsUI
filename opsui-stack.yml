@@ -22,7 +22,7 @@ services:
       LOG_ROOT: /logs
       FILES_ROOT: /host                  # Files tab root (= the VM's /)
       FILES_HOME: opt/docker             # folder the Files tab opens in
-      OPS_USER: admin
+      OPS_USER: Secline
       OPS_PASS_FILE: /run/secrets/opsui_password
       VM_SSH: ocsautotest@10.104.10.88   # default target for "VM (SSH)" terminals
       MAX_STREAMS: "3"

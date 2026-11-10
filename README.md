@@ -14,10 +14,11 @@ Image: `deepakkumarps08122/opsui:1.0`
 |---|---|
 | **Terminal** | Real interactive shells in the browser, up to 4 tabs. vim, top, `docker exec -it`, Tab completion and Ctrl+C all work. |
 | **Commands** | Your own saved commands: add, edit and delete them in the UI. Click one to run it in a terminal. |
-| **Live logs** | Streams swarm service logs, container logs or log files live, with error/warning highlighting, filter, pause and download. |
-| **Files** | Browse and edit any file on the VM. Saving keeps a `.bak` copy of the previous version. |
+| **Live logs** | Streams logs of **running** swarm services (plus standalone containers and log files) live, with error/warning highlighting, filter, pause and download. Stopped services (0 replicas) are not listed. |
+| **Files** | Browse and edit any file on the VM. Drag files or whole folders from your desktop onto the list to upload them; hover an entry and click the bin icon to delete it. Saving keeps a `.bak` copy of the previous version. |
 
 The header also shows swarm health ("3/3 nodes ready"), the leader's hostname and a light/dark theme toggle.
+The bottom of the left sidebar lists the **installed version** of every running service, e.g. `Bridge Service 2.1.5.3`.
 Colours follow Motion Applied branding (Orange #FA6914, Grey #1F292E, Teal, Bright Blue).
 
 Footprint: about 25 MB RAM and 0% CPU when idle.
@@ -53,7 +54,7 @@ Footprint: about 25 MB RAM and 0% CPU when idle.
 
 ```
   Browser (index.html + xterm.js)
-     │  HTTP Basic auth (admin / password from the Docker secret)
+     │  HTTP Basic auth (Secline / password from the Docker secret)
      ▼
   app.py  — ThreadingHTTPServer on :3000, inside the opsui container
      ├── /api/*        JSON + streaming endpoints
@@ -73,7 +74,7 @@ Footprint: about 25 MB RAM and 0% CPU when idle.
 4. It lowers its own CPU priority (`nice 10`) so it always gives way to Bridge, then listens on `0.0.0.0:3000`.
 
 ### 3.2 Login and security
-- Every page and API call needs **HTTP Basic auth** (`OPS_USER`, default `admin`, plus the password).
+- Every page and API call needs **HTTP Basic auth** (`OPS_USER`, default `Secline`, plus the password).
   The browser shows its own login box. The password is compared in constant time.
 - POST requests (save file, save commands, run) are refused if the `Origin` header is from another site,
   which blocks cross-site request forgery.
@@ -117,8 +118,9 @@ Footprint: about 25 MB RAM and 0% CPU when idle.
   Up to 500 commands are kept.
 
 ### 3.5 Live logs
-- `/api/targets` lists swarm services, running containers and `*.log/*.txt/*.out` files under `/logs`
-  (two folder levels deep). The result is cached for 10 s.
+- `/api/targets` lists swarm services with at least one running replica, running containers that are *not*
+  swarm tasks (those are already covered by their service), and `*.log/*.txt/*.out` files under `/logs`
+  (two folder levels deep). The result is cached for 10 s, and the page refreshes it every 60 s.
 - Choosing a source opens `/api/logs`, which runs one of:
   - `docker service logs -f --timestamps --tail N <service>`
   - `docker logs -f --timestamps --tail N <container>`
@@ -136,11 +138,38 @@ Footprint: about 25 MB RAM and 0% CPU when idle.
 - `/api/ls` lists a folder; `/api/file` (GET) opens a text file up to 2 MB. Binary files are refused (use the terminal).
 - Saving (POST `/api/file`, or Ctrl+S) first copies the old file to `<name>.bak`, then writes the new content.
   An existing file keeps its owner and permissions. A new file gets the same owner as its folder (not root).
+- **Upload**: drop files or folders on the list (or on a folder in it) to upload there. The page first asks
+  `/api/exists` which files are already there and lets you overwrite or skip them, then sends each file to
+  `/api/upload` (3 at a time, with a progress bar). The server streams the body to a temporary file and
+  renames it into place, so a failed upload never leaves a half-written file. Limit: `MAX_UPLOAD_MB` per file.
+- **Delete**: the bin icon calls `/api/delete`; folders are removed with everything inside. A symlink is
+  removed itself, never its target. Top-level folders of the VM (`/etc`, `/usr`, …) and the Files home
+  folder (and its parents) are refused.
 - Without the `/:/host` mount, the Files tab falls back to `/opt/docker` only.
 
-### 3.7 Swarm status
-`/api/status` runs `docker node ls` and `docker service ls` (cached for 20 s). The page refreshes it every
-60 s, and only while the browser tab is visible.
+### 3.7 Swarm status and installed versions
+`/api/status` runs `docker node ls` and reports the version of each running service (cached for 20 s).
+The page refreshes it every 60 s, and only while the browser tab is visible.
+
+The version is found in this order (cached per image digest, so a redeployed `:latest` is picked up):
+1. the image tag, e.g. `registry/bridge-service:2.1.5.3` → `2.1.5.3`;
+2. **`:latest` images**: swarm pins every service to an exact image digest (`@sha256:…`). OpsUI asks the
+   image's registry which version tag points at that same digest — publishers push the same image as
+   both `latest` and e.g. `2.1.5.3`, so this is exactly the version that is running. Docker Hub uses its
+   tags API; other registries (e.g. `ghcr.io`) use the standard registry API. Tag suffixes for the base
+   OS are dropped (`8.0.4-ubuntu2204` → `8.0.4`). This needs outbound HTTPS from the manager to the
+   registry (it already has it, since it pulls the images); if the registry can't be reached it is retried
+   after 10 minutes;
+3. otherwise the running image is inspected for an env var named after the service (`BRIDGE_VERSION`,
+   `MONGO_VERSION`, …), the label `org.opencontainers.image.version` (ignored when it is just the base
+   OS version, e.g. Ubuntu `22.04`), then a generic `VERSION` / `APP_VERSION`;
+4. if nothing is found, the tag itself (e.g. `latest`) is shown.
+
+If the VM reaches the internet through a TLS-inspecting proxy, set `HTTPS_PROXY` and mount the proxy's
+CA bundle with `SSL_CERT_FILE` in the stack file so step 2 can verify the registry's certificate.
+
+Names are derived from the service name: `bridge_bridge-service` → **Bridge Service**, `kafka_kafka-ui` → **Kafka UI**.
+Hover a row to see the full service and image name.
 
 ### 3.8 Why it stays light
 - Nothing runs unless a browser is connected, and every child process is killed as soon as its terminal or stream closes.
@@ -154,7 +183,7 @@ Footprint: about 25 MB RAM and 0% CPU when idle.
 ## 4. Step by step: what travels between browser and server
 
 The examples below use the real messages that `index.html` and `app.py` exchange.
-`abc123` stands for the token and `YWRtaW46...` for the encoded login; the real values are random or secret.
+`abc123` stands for the token and `U2VjbGluZTo...` for the encoded login; the real values are random or secret.
 
 ### 4.1 Three kinds of connection
 
@@ -212,9 +241,9 @@ GET /                      -------------->  no Authorization header
                            <--------------  401 Unauthorized
                                             WWW-Authenticate: Basic realm="OpsUI"
 
-  (the browser shows its login box; you type admin and the password)
+  (the browser shows its login box; you type Secline and the password)
 
-GET /                      -------------->  Authorization: Basic YWRtaW46...
+GET /                      -------------->  Authorization: Basic U2VjbGluZTo...
                                             compare with the expected value
                                             (constant-time compare)
                            <--------------  200 OK  index.html  (gzip-compressed)
@@ -225,7 +254,7 @@ GET /static/vendor/xterm.mjs ------------>
 GET /api/config            -------------->  makes a new random token, valid 12 h
                            <--------------  {"vmSsh":"ocsautotest@10.104.10.88",
                                              "token":"abc123", "workspace":"/opt/docker",
-                                             "maxTerms":4, "user":"admin",
+                                             "maxTerms":4, "user":"Secline",
                                              "filesHome":"opt/docker"}
 
 GET /api/status            -------------->  docker node ls + docker service ls
@@ -238,7 +267,7 @@ GET /api/commands          -------------->  reads /opt/docker/opsui-commands.jso
 ```
 
 After this the browser repeats its `Authorization` header on every request automatically, so you log in only once.
-`YWRtaW46...` is just `admin:password` in base64. It is **encoded, not encrypted**, which is why OpsUI
+`U2VjbGluZTo...` is just `Secline:password` in base64. It is **encoded, not encrypted**, which is why OpsUI
 must stay on the internal network (plain HTTP).
 
 The page asks for `/api/status` again every 60 s, but only while the browser tab is visible.
@@ -439,7 +468,7 @@ POST /api/run              -------------->  /bin/sh -c "docker node ls"   in /op
                            <--------------  [exit code 0]
 ```
 
-    curl -u admin:PASSWORD -H 'Content-Type: application/json' \
+    curl -u Secline:PASSWORD -H 'Content-Type: application/json' \
          -d '{"cmd":"docker node ls"}' http://10.104.10.88:3000/api/run
 
 ### 4.8 Error answers you may see
@@ -464,12 +493,16 @@ All endpoints need Basic auth, except `/ws/term`, which uses the token.
 | GET | `/` | The UI (`index.html`). |
 | GET | `/static/...` | xterm.js files. |
 | GET | `/api/config` | Default SSH target, WebSocket token, workspace, max terminals, user, Files home folder. |
-| GET | `/api/status` | Swarm nodes and services. |
-| GET | `/api/targets` | Log sources: services, containers, log files. |
+| GET | `/api/status` | Swarm nodes and installed versions of running services. |
+| GET | `/api/targets` | Log sources: running services, standalone containers, log files. |
 | GET | `/api/logs?kind=service\|container\|file&name=...&tail=200` | Live log stream (plain text). |
 | GET | `/api/ls?path=...` | List a folder under `FILES_ROOT`. |
 | GET | `/api/file?path=...` | Read a text file. |
 | POST | `/api/file` | `{"path","content"}`: save a file (keeps `.bak`). |
+| POST | `/api/upload?path=...&overwrite=1` | Raw file body: upload a file (parent folders are created). |
+| POST | `/api/exists` | `{"paths":[...]}`: which of these paths already exist. |
+| POST | `/api/mkdir` | `{"path"}`: create a folder (and its parents). |
+| POST | `/api/delete` | `{"path"}`: delete a file, symlink or folder (recursive). |
 | GET | `/api/commands` | List saved commands. |
 | POST | `/api/commands` | `{"commands":[...]}`: replace the saved command list. |
 | POST | `/api/run` | `{"cmd","cwd"}`: run a command in the workspace and stream its output and exit code. |
@@ -482,7 +515,7 @@ All endpoints need Basic auth, except `/ws/term`, which uses the token.
 | Variable | Default | Meaning |
 |---|---|---|
 | `PORT` | `3000` | Listening port. |
-| `OPS_USER` | `admin` | Login user name. |
+| `OPS_USER` | `Secline` | Login user name. |
 | `OPS_PASS_FILE` | — | File holding the password (the Docker secret). |
 | `OPS_PASS` | — | Password as plain text (used only if there is no `OPS_PASS_FILE`). |
 | `WORKSPACE` | `/opt/docker` | Folder where terminals start; saved commands live here. |
@@ -492,6 +525,7 @@ All endpoints need Basic auth, except `/ws/term`, which uses the token.
 | `VM_SSH` | — | Default target for VM (SSH) terminals, e.g. `ocsautotest@10.104.10.88`. |
 | `MAX_TERMS` | `4` | Most terminals open at once. |
 | `MAX_STREAMS` | `3` | Most live log/run streams at once. |
+| `MAX_UPLOAD_MB` | `512` | Largest single file accepted by drag & drop upload. |
 | `TZ` | — | Time zone (stack file uses `Europe/London`). |
 
 ### Mounts used by the stack file
@@ -537,7 +571,7 @@ Or update only the running service:
         --env-add FILES_ROOT=/host --env-add FILES_HOME=opt/docker \
         --limit-cpu 0.5 opsui_opsui
 
-Then open `http://10.104.10.88:3000` and log in as `admin`.
+Then open `http://10.104.10.88:3000` and log in as `Secline`.
 
 > If you rebuild with the same `1.0` tag, add `--force` to `docker service update` so swarm pulls the new image.
 

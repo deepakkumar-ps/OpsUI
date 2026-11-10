@@ -64,13 +64,18 @@
   .iconbtn:hover{border-color:var(--accent);color:var(--accent)}
 
   /* ---------- shell layout ---------- */
-  .app{flex:1;min-height:0;display:grid;grid-template-columns:200px minmax(0,1fr)}
+  .app{flex:1;min-height:0;display:grid;grid-template-columns:220px minmax(0,1fr)}
   nav.side{background:var(--surface);border-right:1px solid var(--line);padding:14px 10px;display:flex;flex-direction:column;gap:4px}
   .navbtn{display:flex;align-items:center;gap:11px;width:100%;padding:10px 12px;border:0;border-radius:var(--radius);background:none;color:var(--muted);text-align:left;font-weight:500}
   .navbtn:hover{background:var(--hover);color:var(--text)}
   .navbtn.on{background:var(--accent-soft);color:var(--accent);font-weight:600;box-shadow:inset 3px 0 0 var(--accent)}
   .navbtn .cnt{margin-left:auto;font-size:11px;background:var(--surface2);border:1px solid var(--line);border-radius:10px;padding:0 7px;color:var(--muted)}
-  .side .foot{margin-top:auto;font-size:11.5px;color:var(--faint);padding:8px 12px;line-height:1.4}
+  .side .foot{margin-top:auto;min-height:0;max-height:55%;overflow:auto;padding:10px 6px 2px;border-top:1px solid var(--line)}
+  .foot .vh{font-size:11px;letter-spacing:1.1px;text-transform:uppercase;color:var(--faint);font-weight:600;padding:0 6px 6px}
+  .ver{display:flex;align-items:baseline;gap:8px;padding:3px 6px;border-radius:5px;font-size:12px;color:var(--muted)}
+  .ver:hover{background:var(--hover);color:var(--text)}
+  .ver .n{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .ver .v{font:11.5px var(--mono);color:var(--text);white-space:nowrap}
   main{min-width:0;min-height:0;display:flex}
   .view{flex:1;min-width:0;min-height:0;display:none}
   .view.on{display:flex}
@@ -151,6 +156,18 @@
   .stat{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;color:var(--muted);padding:4px 10px;border-radius:14px;background:var(--surface2);border:1px solid var(--line)}
   .stat b{color:var(--text)} .stat.e b{color:var(--err)} .stat.w b{color:var(--warn)}
   #editor{flex:1;min-height:0;resize:none;border:0;outline:none;background:var(--term-bg);color:var(--text);font:13px/1.55 var(--mono);padding:14px 16px;tab-size:4;white-space:pre;overflow:auto}
+  .fitem{position:relative}
+  .fitem .item{padding-right:38px}
+  .fitem .del{position:absolute;right:6px;top:50%;transform:translateY(-50%);display:none;place-items:center;width:28px;height:28px;border:1px solid transparent;border-radius:6px;background:var(--surface2);color:var(--muted)}
+  .fitem:hover .del,.fitem .del:focus-visible{display:grid}
+  .fitem .del:hover{color:var(--err);border-color:var(--err)}
+  .fitem .del svg.i{width:15px;height:15px}
+  .item.droptgt{border-color:var(--accent);border-style:dashed;background:var(--accent-soft)}
+  #fPanel{position:relative}
+  #fPanel.drop::after{content:attr(data-drop);position:absolute;left:8px;right:8px;bottom:62px;padding:12px;border:2px dashed var(--accent);border-radius:10px;background:var(--surface);color:var(--accent);font-weight:600;font-size:13px;text-align:center;pointer-events:none;box-shadow:var(--shadow)}
+  .upl{padding:8px 12px;border-top:1px solid var(--line);font-size:12px;color:var(--muted)}
+  .upl .bar2{height:4px;border-radius:2px;background:var(--surface2);margin-top:6px;overflow:hidden}
+  .upl .bar2 i{display:block;height:100%;width:0;background:var(--accent);transition:width .15s}
   .crumb{font:13px var(--mono);color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
   .form{flex:1;overflow:auto;padding:22px 26px;max-width:860px}
   .form h2{margin:0 0 4px;font-size:20px}
@@ -192,6 +209,8 @@
   <symbol id="i-save" viewBox="0 0 24 24"><path d="M5 3h11l5 5v11a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2z"/><path d="M7 3v6h8M7 21v-7h10v7"/></symbol>
   <symbol id="i-panel" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M15 4v16"/></symbol>
   <symbol id="i-dl" viewBox="0 0 24 24"><path d="M12 3v12M7 10l5 5 5-5M5 21h14"/></symbol>
+  <symbol id="i-file" viewBox="0 0 24 24"><path d="M14 3H7a2 2 0 00-2 2v14a2 2 0 002 2h10a2 2 0 002-2V8z"/><path d="M14 3v5h5"/></symbol>
+  <symbol id="i-trash" viewBox="0 0 24 24"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 12a2 2 0 002 2h6a2 2 0 002-2l1-12M9 7V4h6v3"/></symbol>
 </svg>
 
 <header class="top">
@@ -211,7 +230,7 @@
     <button type="button" class="navbtn" data-view="cmds"><svg class="i"><use href="#i-cmd"/></svg>Commands<span class="cnt" id="cmdCount">0</span></button>
     <button type="button" class="navbtn" data-view="logs"><svg class="i"><use href="#i-logs"/></svg>Live logs<span class="dot hidden" id="liveDot" style="margin-left:auto"></span></button>
     <button type="button" class="navbtn" data-view="files"><svg class="i"><use href="#i-files"/></svg>Files</button>
-    <div class="foot">Commands &amp; files are saved on the VM in <span class="mono" id="wsPath">/opt/docker</span></div>
+    <div class="foot" aria-label="Installed versions"><div class="vh">Installed versions</div><div id="verList"><div class="ver">loading…</div></div></div>
   </nav>
 
   <main>
@@ -325,10 +344,11 @@
     <!-- ======================= FILES ======================= -->
     <section class="view" id="v-files">
       <div class="split">
-        <div class="panel">
+        <div class="panel" id="fPanel">
           <div class="panel-h"><span>VM files</span><button type="button" class="tiny" id="fRefresh">Refresh</button></div>
           <div style="padding:0 12px 8px"><input class="field mono" id="fGo" placeholder="go to path, e.g. /etc/nginx  ↵" style="width:100%" aria-label="Go to path"></div>
           <div class="list" id="fList"></div>
+          <div class="upl hidden" id="fUp" aria-live="polite"><span id="fUpTxt"></span><div class="bar2"><i id="fUpBar"></i></div></div>
           <div style="display:flex;gap:6px;padding:10px 12px;border-top:1px solid var(--line)">
             <input class="field" id="fNew" placeholder="new file name" style="flex:1;width:0">
             <button type="button" class="btn" id="fNewBtn">Create</button>
@@ -365,7 +385,7 @@ async function api(url, opts) {
 }
 const post = (url, body) => api(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
 
-let cfg = { vmSsh: '', token: '', workspace: '/opt/docker', maxTerms: 4 };
+let cfg = { vmSsh: '', token: '', workspace: '/opt/docker', maxTerms: 4, maxUpload: 512 * 1048576 };
 let view = 'term';
 
 /* ===================== theme ===================== */
@@ -404,6 +424,7 @@ async function status() {
   if (document.hidden) return;
   try {
     const s = await api('/api/status');
+    if (s.error) throw new Error(s.error);
     const nodes = (s.nodes || []).map(n => n.split('\t'));
     const ready = nodes.filter(n => n[1] === 'Ready').length;
     $('nodetxt').textContent = nodes.length ? `${ready}/${nodes.length} nodes ready` : 'no swarm';
@@ -411,10 +432,15 @@ async function status() {
     $('nodechip').title = nodes.map(n => `${n[0]}  ${n[1]}  ${n[3] || ''}`).join('\n');
     const leader = nodes.find(n => /Leader/.test(n[3] || ''));
     $('hostname').textContent = leader ? '· ' + leader[0] : '';
-    svcInfo = {};
-    (s.services || []).forEach(x => { const [n, r] = x.split('\t'); svcInfo[n] = r || ''; });
-    if (view === 'logs') renderTargets();
+    renderVersions(s.versions || []);
   } catch { $('nodetxt').textContent = 'status unavailable'; $('nodedot').className = 'dot bad'; }
+  if (view === 'logs') loadTargets();          // running services change: keep the log list current
+}
+function renderVersions(vs) {
+  $('verList').replaceChildren(...(vs.length ? vs.map(v => {
+    const r = el('div', 'ver'); r.title = `${v.service}\n${v.image}`;
+    r.append(el('span', 'n', v.label), el('span', 'v', v.version || '—')); return r;
+  }) : [el('div', 'ver', 'no services running')]));
 }
 setInterval(status, 60000);
 document.addEventListener('visibilitychange', () => { if (!document.hidden) status(); });
@@ -543,19 +569,16 @@ window.addEventListener('beforeunload', e => { if (sessions.some(s => s.open)) {
 
 /* ===================== COMMANDS ===================== */
 let commands = [], editId = null;
-async function loadCommands() {
-  const r = await api('/api/commands');
-  commands = Array.isArray(r) ? r : [];
-  $('cmdCount').textContent = commands.length;
+function setCommands(list) {
+  commands = list; $('cmdCount').textContent = list.length;
   renderQc(); if (view === 'cmds') renderCmdList();
-  $('groupList').replaceChildren(...[...new Set(commands.map(c => c.group))].map(g => { const o = el('option'); o.value = g; return o; }));
+  $('groupList').replaceChildren(...[...new Set(list.map(c => c.group))].map(g => { const o = el('option'); o.value = g; return o; }));
 }
+async function loadCommands() { const r = await api('/api/commands'); setCommands(Array.isArray(r) ? r : []); }
 async function saveAll(list) {
   const r = await post('/api/commands', { commands: list });
   if (r.error) { toast(r.error, 'err'); return false; }
-  commands = r; $('cmdCount').textContent = commands.length; renderQc(); renderCmdList();
-  $('groupList').replaceChildren(...[...new Set(commands.map(c => c.group))].map(g => { const o = el('option'); o.value = g; return o; }));
-  return true;
+  setCommands(r); return true;
 }
 function grouped(list) {
   const m = new Map();
@@ -657,7 +680,7 @@ function watchPrompt(s) {
 /* ===================== LIVE LOGS ===================== */
 const PING = '::opsui-ping::', ANSI = /\x1b\[[0-9;?]*[A-Za-z]/g, MAX_LINES = 2000;
 const ERR_RE = /\b(ERROR|FATAL|EXCEPTION|CRITICAL|Traceback|panic)\b/i, WARN_RE = /\bWARN(ING)?\b/i;
-let svcInfo = {}, targets = { services: [], containers: [], files: [] };
+let targets = { services: [], containers: [], files: [] };
 let curTarget = localStorage.getItem('opsui.target') || '', logCtl = null, wantLive = false, runId = 0, paused = false;
 let nAll = 0, nErr = 0, nWarn = 0, countsDirty = false, queue = [], scheduled = false;
 
@@ -679,7 +702,7 @@ function pushLine(t, c) {
 }
 function flush() {
   scheduled = false; if (paused || !queue.length) return;
-  const scr = $('lScreen'), frag = document.createDocumentFragment();
+  const scr = $('lScreen'), frag = document.createDocumentFragment(), matches = lineFilter();
   for (const [t, c] of queue) {
     const d = el('div', null, t); const k = c || (ERR_RE.test(t) ? 'err' : WARN_RE.test(t) ? 'warn' : '');
     if (k) d.className = 'l-' + k; nAll++; if (k === 'err') nErr++; if (k === 'warn') nWarn++;
@@ -690,31 +713,33 @@ function flush() {
   if ($('lFollow').checked) scr.scrollTop = scr.scrollHeight;
 }
 setInterval(() => { if (!countsDirty) return; countsDirty = false; $('cAll').textContent = nAll; $('cErr').textContent = nErr; $('cWarn').textContent = nWarn; }, 500);
-function matches(t, k) {
-  if ($('lOnlyErr').checked && k !== 'err' && k !== 'warn' && k !== 'sys') return false;
-  const f = $('lFilter').value.trim().toLowerCase(); return !f || t.toLowerCase().includes(f);
+// read the filter inputs once per batch, not once per line
+function lineFilter() {
+  const only = $('lOnlyErr').checked, f = $('lFilter').value.trim().toLowerCase();
+  return (t, k) => (!only || k === 'err' || k === 'warn' || k === 'sys') && (!f || t.toLowerCase().includes(f));
 }
-function refilter() { for (const d of $('lScreen').children) { const k = d.className.startsWith('l-') ? d.className.slice(2) : ''; d.hidden = !matches(d.textContent, k); } }
+function refilter() { const m = lineFilter(); for (const d of $('lScreen').children) { const k = d.className.startsWith('l-') ? d.className.slice(2) : ''; d.hidden = !m(d.textContent, k); } }
 $('lFilter').addEventListener('input', refilter); $('lOnlyErr').addEventListener('change', refilter);
 
 async function loadTargets() { const t = await api('/api/targets'); if (t.error) { $('lList').replaceChildren(el('div', 'empty', t.error)); return; } targets = t; renderTargets(); }
 function renderTargets() {
-  const list = $('lList'); list.textContent = ''; let n = 0;
-  const group = (label, kind, names) => {
-    if (!names || !names.length) return; list.appendChild(el('div', 'grp', label));
-    names.forEach(name => {
-      const key = kind + ':' + name, b = el('button', 'item' + (key === curTarget ? ' on' : '')); b.type = 'button'; n++;
-      const d = el('span', 'dot');
-      if (key === curTarget && wantLive) d.className = 'dot run';
-      else if (kind === 'service' && svcInfo[name]) { const m = /^(\d+)\/(\d+)/.exec(svcInfo[name]); if (m) d.className = 'dot ' + (m[1] === m[2] && m[2] !== '0' ? 'ok' : 'bad'); }
-      const sub = key === curTarget && wantLive ? 'live' : kind === 'service' ? (svcInfo[name] ? 'replicas ' + svcInfo[name] : 'service') : kind;
-      const body = el('span', 'body'); body.append(el('span', 't', name), el('span', 's', sub));
-      b.append(d, body); b.addEventListener('click', () => { curTarget = key; localStorage.setItem('opsui.target', key); startLogs(); });
+  const list = $('lList'), top = list.scrollTop; list.textContent = ''; let n = 0;
+  const group = (label, kind, items) => {
+    if (!items || !items.length) return; list.appendChild(el('div', 'grp', label));
+    items.forEach(({ name, sub, dot }) => {
+      const key = kind + ':' + name, live = key === curTarget && wantLive;
+      const b = el('button', 'item' + (key === curTarget ? ' on' : '')); b.type = 'button'; b.title = name; n++;
+      const body = el('span', 'body'); body.append(el('span', 't', name), el('span', 's', live ? 'live' : sub));
+      b.append(el('span', 'dot ' + (live ? 'run' : dot || '')), body);
+      b.addEventListener('click', () => { curTarget = key; localStorage.setItem('opsui.target', key); startLogs(); });
       list.appendChild(b);
     });
   };
-  group('Swarm services', 'service', targets.services); group('Containers', 'container', targets.containers); group('Log files', 'file', targets.files);
-  if (!n) list.appendChild(el('div', 'empty', 'Nothing found. Is /var/run/docker.sock mounted?'));
+  group('Running services', 'service', (targets.services || []).map(s => ({ name: s.name, sub: 'replicas ' + s.replicas, dot: s.running >= s.desired ? 'ok' : 'warn' })));
+  group('Containers', 'container', (targets.containers || []).map(name => ({ name, sub: 'standalone container' })));
+  group('Log files', 'file', (targets.files || []).map(name => ({ name, sub: 'file' })));
+  if (!n) list.appendChild(el('div', 'empty', 'No running services found. Is /var/run/docker.sock mounted?'));
+  list.scrollTop = top;
 }
 function setLogState(txt, cls) {
   const name = curTarget ? curTarget.slice(curTarget.indexOf(':') + 1) : 'Select a source';
@@ -754,25 +779,160 @@ $('lDl').addEventListener('click', () => {
 });
 
 /* ===================== FILES ===================== */
-let curDir = '', curFile = null, dirty = false;
+let curDir = '', curFile = null, dirty = false, dirList = { items: [], truncated: false };
 const join = (a, b) => a ? a + '/' + b : b;
+const parentOf = p => p.split('/').slice(0, -1).join('/');
+const fmtSize = n => n < 1024 ? n + ' B' : n < 1048576 ? (n / 1024).toFixed(1) + ' KB' : n < 1073741824 ? (n / 1048576).toFixed(1) + ' MB' : (n / 1073741824).toFixed(2) + ' GB';
 async function ls(path) {
-  const r = await api('/api/ls?path=' + encodeURIComponent(path)); const list = $('fList'); list.textContent = '';
-  if (r.error) { list.appendChild(el('div', 'empty', r.error)); return; }
-  curDir = r.path; list.appendChild(el('div', 'grp', '/' + curDir));
-  const add = (label, sub, on, fn, ic) => { const b = el('button', 'item' + (on ? ' on' : '')); b.type = 'button';
-    const body = el('span', 'body'); body.append(el('span', 't', label), el('span', 's', sub)); b.append(icon(ic), body); b.addEventListener('click', fn); list.appendChild(b); };
-  if (curDir) add('..', 'parent folder', false, () => ls(curDir.split('/').slice(0, -1).join('/')), 'files');
-  r.items.forEach(it => { const p = join(curDir, it.name);
-    add(it.name, it.dir ? 'folder' : (p === curFile ? (dirty ? 'editing · unsaved' : 'editing') : 'file'), p === curFile, () => it.dir ? ls(p) : openFile(p), it.dir ? 'files' : 'save'); });
-  if (!r.items.length) list.appendChild(el('div', 'empty', '(empty folder)'));
+  const r = await api('/api/ls?path=' + encodeURIComponent(path));
+  if (r.error) { $('fList').replaceChildren(el('div', 'empty', r.error)); return false; }
+  if (r.path !== curDir) $('fList').scrollTop = 0;
+  curDir = r.path; dirList = r; renderDir(); return true;
 }
-function setDirty(v) { dirty = v; $('fDot').className = 'dot ' + (curFile ? (v ? 'warn' : 'ok') : ''); $('fMsg').textContent = curFile ? (v ? 'unsaved changes' : '') : ''; }
+// re-render from the cached listing (no server round-trip when only the highlight changes)
+function renderDir() {
+  const list = $('fList'), top = list.scrollTop; list.textContent = '';
+  list.appendChild(el('div', 'grp', '/' + curDir));
+  const add = (label, sub, ic, path, isDir, canDelete) => {
+    const row = el('div', 'fitem'); if (isDir) row.dataset.dir = path;
+    const b = el('button', 'item' + (path === curFile ? ' on' : '')); b.type = 'button'; b.title = '/' + path;
+    const body = el('span', 'body'); body.append(el('span', 't', label), el('span', 's', sub)); b.append(icon(ic), body);
+    b.addEventListener('click', () => isDir ? ls(path) : openFile(path)); row.appendChild(b);
+    if (canDelete) {
+      const d = el('button', 'del'); d.type = 'button'; d.title = 'Delete ' + label; d.setAttribute('aria-label', 'Delete ' + label);
+      d.appendChild(icon('trash')); d.addEventListener('click', () => deletePath(path, isDir)); row.appendChild(d);
+    }
+    list.appendChild(row);
+  };
+  if (curDir) add('..', 'parent folder', 'files', parentOf(curDir), true, false);
+  dirList.items.forEach(it => { const p = join(curDir, it.name);
+    add(it.name, it.dir ? 'folder' : (p === curFile ? (dirty ? 'editing · unsaved' : 'editing') : 'file'), it.dir ? 'files' : 'file', p, it.dir, true); });
+  if (dirList.truncated) list.appendChild(el('div', 'empty', `Showing the first ${dirList.items.length} entries — use the terminal for the rest.`));
+  if (!dirList.items.length) list.appendChild(el('div', 'empty', '(empty folder) — drag files or folders here to upload'));
+  list.scrollTop = top;
+}
+function setDirty(v) {
+  const changed = dirty !== v; dirty = v;
+  $('fDot').className = 'dot ' + (curFile ? (v ? 'warn' : 'ok') : ''); $('fMsg').textContent = curFile ? (v ? 'unsaved changes' : '') : '';
+  if (changed && curFile) renderDir();
+}
 async function openFile(p) {
   if (dirty && !confirm('Discard unsaved changes?')) return;
   const r = await api('/api/file?path=' + encodeURIComponent(p)); if (r.error) { toast(r.error, 'err'); return; }
   curFile = p; $('editor').value = r.content; $('editor').scrollTop = 0; $('fPath').textContent = '/' + p;
-  $('fSave').disabled = false; $('fReload').disabled = false; setDirty(false); ls(curDir); $('editor').focus();
+  $('fSave').disabled = false; $('fReload').disabled = false; dirty = false; setDirty(false); renderDir(); $('editor').focus(); updPos();
+}
+function closeFile() {
+  curFile = null; dirty = false; $('editor').value = ''; $('fPath').textContent = 'No file open';
+  $('fSave').disabled = true; $('fReload').disabled = true; setDirty(false); updPos();
+}
+async function deletePath(p, isDir) {
+  const msg = isDir ? `Delete the folder “/${p}” and EVERYTHING inside it?` : `Delete “/${p}”?`;
+  if (!confirm(msg + '\n\nThis cannot be undone.')) return;
+  const r = await post('/api/delete', { path: p });
+  if (r.error) { toast(r.error, 'err'); return; }
+  if (curFile && (curFile === p || curFile.startsWith(p + '/'))) closeFile();
+  toast('Deleted /' + p, 'ok'); ls(curDir);
+}
+
+/* ---- drag & drop upload (files and whole folders from the desktop) ---- */
+const fPanel = $('fPanel');
+const hasFiles = e => !!e.dataTransfer && [...e.dataTransfer.types].includes('Files');
+const dropDir = e => { const row = e.target.closest && e.target.closest('.fitem[data-dir]'); return row ? row.dataset.dir : curDir; };
+function markDrop(e) {
+  const row = e && e.target.closest && e.target.closest('.fitem[data-dir]');
+  fPanel.querySelectorAll('.droptgt').forEach(x => { if (!row || x.parentNode !== row) x.classList.remove('droptgt'); });
+  if (row) row.firstChild.classList.add('droptgt');
+  if (e) { fPanel.classList.add('drop'); fPanel.dataset.drop = 'Drop to upload into /' + dropDir(e); }
+  else fPanel.classList.remove('drop');
+}
+fPanel.addEventListener('dragover', e => { if (!hasFiles(e)) return; e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; markDrop(e); });
+fPanel.addEventListener('dragleave', e => { if (!fPanel.contains(e.relatedTarget)) markDrop(null); });
+fPanel.addEventListener('drop', e => {
+  if (!hasFiles(e)) return; e.preventDefault();
+  const dest = dropDir(e); markDrop(null);
+  // entries must be grabbed synchronously: the DataTransfer is emptied once this handler returns
+  const entries = [...e.dataTransfer.items].filter(i => i.kind === 'file').map(i => i.webkitGetAsEntry && i.webkitGetAsEntry());
+  uploadDrop(dest, entries, [...e.dataTransfer.files]);
+});
+// a drop anywhere else must not make the browser navigate away to the dropped file
+window.addEventListener('dragover', e => { if (hasFiles(e) && !fPanel.contains(e.target)) { e.preventDefault(); e.dataTransfer.dropEffect = 'none'; } });
+window.addEventListener('drop', e => { if (hasFiles(e)) e.preventDefault(); });
+
+async function collect(entry, prefix, out) {
+  if (entry.isFile) { out.files.push([prefix + entry.name, await new Promise((ok, bad) => entry.file(ok, bad))]); return; }
+  if (!entry.isDirectory) return;
+  const dir = prefix + entry.name, reader = entry.createReader(); out.dirs.push(dir);
+  for (;;) {                                   // readEntries returns at most ~100 entries per call
+    const batch = await new Promise((ok, bad) => reader.readEntries(ok, bad));
+    if (!batch.length) break;
+    for (const c of batch) await collect(c, dir + '/', out);
+  }
+}
+function uploadOne(path, file, onProgress) {
+  return new Promise(done => {
+    const x = new XMLHttpRequest();
+    x.open('POST', '/api/upload?overwrite=1&path=' + encodeURIComponent(path));
+    x.setRequestHeader('Content-Type', 'application/octet-stream');
+    x.upload.onprogress = e => onProgress(e.loaded);
+    x.onload = () => { let j = {}; try { j = JSON.parse(x.responseText); } catch {} done(x.status === 200 ? null : (j.error || 'HTTP ' + x.status)); };
+    x.onerror = () => done('network error');
+    x.send(file);
+  });
+}
+let uploading = false;
+async function uploadDrop(dest, entries, fileList) {
+  if (uploading) { toast('An upload is already running — wait for it to finish.', 'err'); return; }
+  const out = { files: [], dirs: [] };
+  try {
+    if (entries.length && entries.every(Boolean)) for (const en of entries) await collect(en, '', out);
+    else fileList.forEach(f => out.files.push([f.name, f]));
+  } catch (err) { toast('Could not read the dropped items: ' + (err.message || err), 'err'); return; }
+  if (!out.files.length && !out.dirs.length) return;
+  const big = out.files.find(([, f]) => f.size > cfg.maxUpload);
+  if (big) { toast(`“${big[0]}” is ${fmtSize(big[1].size)} — over the ${fmtSize(cfg.maxUpload)} upload limit.`, 'err'); return; }
+
+  const full = rel => join(dest, rel);
+  const ex = await post('/api/exists', { paths: out.files.map(([r]) => full(r)) });
+  if (ex.error) { toast(ex.error, 'err'); return; }
+  let todo = out.files;
+  if (ex.exists.length) {
+    const ow = confirm(`${ex.exists.length} file(s) already exist, e.g.\n  /${ex.exists.slice(0, 5).join('\n  /')}\n\n` +
+                       'OK = overwrite them      Cancel = skip them (upload only new files)');
+    if (!ow) { const skip = new Set(ex.exists); todo = todo.filter(([r]) => !skip.has(full(r))); }
+  }
+
+  uploading = true; $('fUp').classList.remove('hidden');
+  const total = todo.reduce((a, [, f]) => a + f.size, 0) || 1, errors = [], doneBytes = [];
+  let sent = 0, finished = 0;
+  const show = name => {
+    const now = sent + doneBytes.reduce((a, b) => a + b, 0);
+    $('fUpTxt').textContent = `Uploading ${finished}/${todo.length} to /${dest}${name ? ' · ' + name : ''} · ${fmtSize(now)} of ${fmtSize(total)}`;
+    $('fUpBar').style.width = Math.min(100, now / total * 100) + '%';
+  };
+  try {
+    // folders that contain no files still need creating
+    for (const d of out.dirs.filter(d => !out.files.some(([r]) => r.startsWith(d + '/')))) {
+      const r = await post('/api/mkdir', { path: full(d) }); if (r.error) errors.push(`${d}: ${r.error}`);
+    }
+    let next = 0;
+    const worker = async slot => {                     // 3 uploads in parallel
+      while (next < todo.length) {
+        const [rel, file] = todo[next++];
+        const err = await uploadOne(full(rel), file, n => { doneBytes[slot] = n; show(rel); });
+        doneBytes[slot] = 0; sent += file.size; finished++; show(rel);
+        if (err) errors.push(`${rel}: ${err}`);
+      }
+    };
+    show(''); await Promise.all([0, 1, 2].map(worker));
+  } finally {
+    uploading = false; $('fUp').classList.add('hidden');
+  }
+  const ok = todo.length - errors.length;
+  if (errors.length) toast(`${errors.length} upload(s) failed — ${errors.slice(0, 3).join(' · ')}`, 'err');
+  if (ok > 0 || out.dirs.length) toast(`Uploaded ${ok} file(s) to /${dest}`, 'ok');
+  await ls(curDir);
+  if (curFile && !dirty && todo.some(([r]) => full(r) === curFile)) openFile(curFile);   // refresh an overwritten open file
 }
 async function saveFile() {
   if (!curFile) return; $('fSave').disabled = true;
@@ -809,7 +969,7 @@ document.addEventListener('keydown', e => { if ((e.ctrlKey || e.metaKey) && e.ke
 /* ===================== boot ===================== */
 async function loadConfig() {
   const c = await api('/api/config');
-  if (!c.error) { cfg = Object.assign(cfg, c); $('wsPath').textContent = cfg.workspace; }
+  if (!c.error) cfg = Object.assign(cfg, c);
 }
 (async () => {
   applyTheme(curTheme());
