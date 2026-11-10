@@ -1,4 +1,4 @@
-# OpsUI 1.0 - Motion Applied swarm console (terminal, commands, live logs, files)
+# OpsUI 1.3 - Motion Applied swarm console (terminal, commands, live logs, files)
 FROM python:3.12-alpine
 
 # bash + ssh for the web terminal, docker CLI for swarm control, a few everyday tools

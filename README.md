@@ -1,10 +1,21 @@
-# OpsUI 1.0 — Motion Applied swarm console
+# OpsUI 1.3 — Motion Applied swarm console
 
 A small, browser-based ops console for the Docker Swarm manager (10.104.10.88), served on port 3000.
-It gives you terminals, saved commands, live logs and a file editor in one page. There is no
+It gives you terminals, saved commands, live logs and a file manager (edit, upload, delete) in one page. There is no
 database, no framework and no build step: one Python file (standard library only) plus one HTML page.
 
-Image: `deepakkumarps08122/opsui:1.0`
+Image: `deepakkumarps08122/opsui:1.3`
+
+### What's new in 1.3
+- **Files: drag & drop upload** — drop files or whole folders from your desktop onto the file list (or onto a
+  folder in it). Existing files can be overwritten or skipped; progress bar; up to `MAX_UPLOAD_MB` per file.
+- **Files: delete** — hover an entry and click the bin icon. Top-level VM folders and `/opt/docker` are protected.
+- **Live logs: running services only** — services with 0 replicas and swarm task containers are no longer listed.
+- **Installed versions in the sidebar** — every running service with the version it is actually running,
+  e.g. **Bridge Service 2.1.5.3**, even when the stack uses `:latest` (looked up by image digest in the registry).
+- **Login user** is now `Secline` (was `admin`).
+- **Faster and lighter** — one shared `docker service ls`, faster WebSocket decoding for terminal input,
+  fewer file-list reloads, large folders capped at 5000 entries.
 
 ---
 
@@ -257,10 +268,13 @@ GET /api/config            -------------->  makes a new random token, valid 12 h
                                              "maxTerms":4, "user":"Secline",
                                              "filesHome":"opt/docker"}
 
-GET /api/status            -------------->  docker node ls + docker service ls
+GET /api/status            -------------->  docker node ls + docker service ls/inspect
+                                            (+ registry lookup once per new image digest)
                                             (result cached for 20 s)
                            <--------------  {"nodes":["mgr1\tReady\tActive\tLeader", ...],
-                                             "services":["bridge_bridge-service\t1/1\t...", ...]}
+                                             "versions":[{"service":"bridge_bridge-service",
+                                                          "label":"Bridge Service",
+                                                          "version":"2.1.5.3", "image":"..."}, ...]}
 
 GET /api/commands          -------------->  reads /opt/docker/opsui-commands.json
                            <--------------  [{"id":"d1","group":"Swarm","name":"Nodes", ...}, ...]
@@ -396,10 +410,12 @@ Content-Type: application/json
 ```
 Browser                                   OpsUI server
 
-GET /api/targets           -------------->  docker service ls, docker ps, look for log files in /logs
+GET /api/targets           -------------->  docker service ls (running only), docker ps
+                                            (non-swarm only), look for log files in /logs
                                             (cached for 10 s)
-                           <--------------  {"services":["bridge_bridge-service","opsui_opsui"],
-                                             "containers":["opsui_opsui.1.x7k..."],
+                           <--------------  {"services":[{"name":"bridge_bridge-service",
+                                                         "replicas":"1/1","running":1,"desired":1}],
+                                             "containers":[],
                                              "files":["bridge/service.log"]}
 
 you click bridge_bridge-service
@@ -556,8 +572,8 @@ Then uncomment the key line in `opsui-stack.yml`.
 
     cd ~/opsui
     sed -i 's/\r$//' Dockerfile app.py opsui-stack.yml      # remove Windows line endings
-    nice -n 19 docker build -t deepakkumarps08122/opsui:1.0 .
-    docker push deepakkumarps08122/opsui:1.0
+    nice -n 19 docker build -t deepakkumarps08122/opsui:1.3 .
+    docker push deepakkumarps08122/opsui:1.3
 
 Deploy or update with the whole stack file (recommended, applies every setting):
 
@@ -565,7 +581,7 @@ Deploy or update with the whole stack file (recommended, applies every setting):
 
 Or update only the running service:
 
-    docker service update --with-registry-auth --image deepakkumarps08122/opsui:1.0 \
+    docker service update --with-registry-auth --image deepakkumarps08122/opsui:1.3 \
         --env-add VM_SSH=ocsautotest@10.104.10.88 --env-add MAX_TERMS=4 \
         --mount-add type=bind,source=/,target=/host \
         --env-add FILES_ROOT=/host --env-add FILES_HOME=opt/docker \
@@ -573,7 +589,7 @@ Or update only the running service:
 
 Then open `http://10.104.10.88:3000` and log in as `Secline`.
 
-> If you rebuild with the same `1.0` tag, add `--force` to `docker service update` so swarm pulls the new image.
+> If you rebuild with the same `1.3` tag, add `--force` to `docker service update` so swarm pulls the new image.
 
 ## 9. Run locally for testing
 
@@ -583,8 +599,8 @@ Needs Linux or WSL, since it uses `pty`, `fcntl` and `termios`:
 
 Or with Docker:
 
-    docker build -t opsui:1.0 .
-    docker run --rm -p 3000:3000 -e OPS_PASS=test -v /var/run/docker.sock:/var/run/docker.sock opsui:1.0
+    docker build -t opsui:1.3 .
+    docker run --rm -p 3000:3000 -e OPS_PASS=test -v /var/run/docker.sock:/var/run/docker.sock opsui:1.3
 
 ## 10. Troubleshooting
 
@@ -592,7 +608,11 @@ Or with Docker:
 |---|---|
 | Container exits with "Refusing to start" | No password: create the `opsui_password` secret or set `OPS_PASS`. |
 | "too many terminals open" / "too many live streams" | Close some terminal tabs or log streams, or raise `MAX_TERMS` / `MAX_STREAMS`. |
-| Live logs says "Nothing found" | `/var/run/docker.sock` is not mounted. |
+| Live logs says "No running services found" | `/var/run/docker.sock` is not mounted, or every service is scaled to 0. |
+| A service is missing from Live logs | It has 0 running replicas (e.g. `0/0`); only running services are listed. |
+| Sidebar version shows `latest` | The registry could not be reached from the VM (proxy / TLS inspection: set `HTTPS_PROXY` and `SSL_CERT_FILE`), or the registry has no version tag for that image. |
+| Upload fails with "file too large" | Raise `MAX_UPLOAD_MB` in the stack file. |
+| Delete says "refusing to delete a top-level or protected folder" | By design: `/etc`, `/usr`, … and `/opt/docker` (and its parents) cannot be deleted from the UI. |
 | Files tab only shows `/opt/docker` | The `/:/host` mount or `FILES_ROOT=/host` is missing. |
 | VM (SSH) asks for a password | Expected unless the SSH key is mounted (section 7). |
 | Terminal shows "[disconnected]" | Press Enter in that tab to reconnect. |

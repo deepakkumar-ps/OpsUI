@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-OpsUI 1.0 - lightweight ops console for a Docker Swarm manager.
+OpsUI 1.3 - lightweight ops console for a Docker Swarm manager.
 
   * Terminal    : real interactive PTY terminals over WebSocket
                   - "container" shell (docker CLI -> host engine, workspace mounted)
@@ -955,7 +955,7 @@ def main():
     threading.stack_size(512 * 1024)
     srv = ThreadingHTTPServer(("0.0.0.0", PORT), Handler)
     srv.daemon_threads = True
-    print(f"OpsUI 1.0 on :{PORT}  workspace={WORKSPACE}  files={FILES_ROOT}  logs={LOG_ROOT}  "
+    print(f"OpsUI 1.3 on :{PORT}  workspace={WORKSPACE}  files={FILES_ROOT}  logs={LOG_ROOT}  "
           f"vm_ssh={VM_SSH or '-'}", flush=True)
     srv.serve_forever(poll_interval=5)
 
